@@ -27,12 +27,16 @@ var _dir_panel: PanelContainer
 var _dir_title: Label
 var _dir_text: Label
 
+var _tts_enabled: bool = false
+
 const PANEL_TOP_TEXT := -180.0
 const PANEL_TOP_OPTIONS := -360.0
 
 
 func _ready() -> void:
 	_build_ui()
+	if OS.has_feature("web"):
+		_setup_tts()
 
 
 func _build_ui() -> void:
@@ -146,6 +150,7 @@ func _build_ui() -> void:
 
 # Show a question with clickable options. Awaitable: returns the chosen index.
 func show_options(speaker: String, prompt: String, options: Array) -> int:
+	_speak(prompt)
 	_speaker_label.text = speaker
 	_text_label.text = prompt
 	_clear_options()
@@ -202,6 +207,7 @@ func clear_timer() -> void:
 
 # Show a plain line of dialogue (no buttons).
 func show_text(speaker: String, text: String) -> void:
+	_speak(text)
 	_speaker_label.text = speaker
 	_text_label.text = text
 	_clear_options()
@@ -217,6 +223,7 @@ func hide_dialogue() -> void:
 
 # Briefly flash a big centered message, then fade it out.
 func show_center_message(text: String) -> void:
+	_speak(text)
 	_center_label.text = text
 	_center_label.modulate.a = 1.0
 	_center_label.visible = true
@@ -234,3 +241,43 @@ func set_score(value: int) -> void:
 func _clear_options() -> void:
 	for child in _options_grid.get_children():
 		child.queue_free()
+
+
+# -----------------------------------------------------------------------------
+# TTS (Web Speech API, local voices only — works offline / spotty WiFi)
+# -----------------------------------------------------------------------------
+func _setup_tts() -> void:
+	JavaScriptBridge.eval("""
+		(function () {
+			if (!window.speechSynthesis) return;
+			window._gd_tts_voice = null;
+			function pickVoice() {
+				var voices = window.speechSynthesis.getVoices();
+				var local = voices.filter(function (v) {
+					return v.localService && v.lang.indexOf('en') === 0;
+				});
+				window._gd_tts_voice = local.length > 0 ? local[0]
+					: (voices.length > 0 ? voices[0] : null);
+			}
+			pickVoice();
+			window.speechSynthesis.addEventListener('voiceschanged', pickVoice);
+		})();
+	""", true)
+	_tts_enabled = true
+
+
+func _speak(text: String) -> void:
+	if not _tts_enabled:
+		return
+	JavaScriptBridge.eval("window._gd_tts_text = %s;" % JSON.stringify(text), true)
+	JavaScriptBridge.eval("""
+		(function () {
+			if (!window.speechSynthesis) return;
+			window.speechSynthesis.cancel();
+			var u = new SpeechSynthesisUtterance(window._gd_tts_text || '');
+			if (window._gd_tts_voice) u.voice = window._gd_tts_voice;
+			u.rate = 0.88;
+			u.volume = 1.0;
+			window.speechSynthesis.speak(u);
+		})();
+	""", true)
