@@ -1157,6 +1157,8 @@ func _build_town(layout: Array, goals: Dictionary, goal_names: Array) -> void:
 	town.name = "Town"
 	add_child(town)
 
+	var by_block: Dictionary = {}  # "bx_bz" -> Array[Node3D]
+
 	for cfg in layout:
 		# Courtyard greenery placed in the (road-less) centre of a block instead
 		# of a landlocked building.
@@ -1172,7 +1174,6 @@ func _build_town(layout: Array, goals: Dictionary, goal_names: Array) -> void:
 		# Props body in world space) line up with the meshes.
 		node.rotation.y = 0.0 if cfg.style == "park" else _park_or_street_facing(cfg.pos)
 		town.add_child(node)
-		_merge_meshes(node)
 		if cfg.get("goal", false):
 			var size: Vector3 = cfg.size
 			# The goal is the patch of ground right in front of the door (building
@@ -1207,6 +1208,15 @@ func _build_town(layout: Array, goals: Dictionary, goal_names: Array) -> void:
 					+ Vector3(0, 4.6, 0) + fwd * (size.z * 0.5 + 0.4))
 			goals[cfg.name] = node
 			goal_names.append(cfg.name)
+		# Group this building with its block peers for merged rendering.
+		var bkey := "%d_%d" % [int(_block_center(cfg.pos.x)), int(_block_center(cfg.pos.z))]
+		if not by_block.has(bkey):
+			by_block[bkey] = []
+		by_block[bkey].append(node)
+
+	# Merge every block's buildings into one MeshInstance3D per block.
+	for bkey in by_block:
+		_merge_block(town, by_block[bkey])
 
 
 # Pack each block with buildings to create a dense "city maze": the goal sits at
@@ -1900,13 +1910,14 @@ func _mat(color: Color) -> StandardMaterial3D:
 	return _mat_cache[color]
 
 
-# Merge all MeshInstance3D descendants of root into a single MeshInstance3D
-# (one surface per unique material). Reduces per-building draw calls from
-# 15-45 down to ~6-8. CollisionShape3D nodes are left untouched.
-func _merge_meshes(root: Node3D) -> void:
+# Merge all buildings in one block into a single MeshInstance3D per block
+# (one surface per unique material across all buildings). CollisionShape3D
+# nodes are left untouched on their original StaticBody3D parents.
+func _merge_block(parent: Node3D, nodes: Array) -> void:
 	var by_mat: Dictionary = {}
 	var to_free: Array = []
-	_collect_for_merge(root, Transform3D.IDENTITY, by_mat, to_free)
+	for node in nodes:
+		_collect_for_merge(node, node.transform, by_mat, to_free)
 	if by_mat.is_empty():
 		return
 	var arr_mesh := ArrayMesh.new()
@@ -1916,7 +1927,7 @@ func _merge_meshes(root: Node3D) -> void:
 		arr_mesh.surface_set_material(arr_mesh.get_surface_count() - 1, mat)
 	var merged := MeshInstance3D.new()
 	merged.mesh = arr_mesh
-	root.add_child(merged)
+	parent.add_child(merged)
 	for node in to_free:
 		node.queue_free()
 
