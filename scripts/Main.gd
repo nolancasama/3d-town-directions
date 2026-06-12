@@ -1157,8 +1157,6 @@ func _build_town(layout: Array, goals: Dictionary, goal_names: Array) -> void:
 	town.name = "Town"
 	add_child(town)
 
-	var by_block: Dictionary = {}  # "bx_bz" -> Array[Node3D]
-
 	for cfg in layout:
 		# Courtyard greenery placed in the (road-less) centre of a block instead
 		# of a landlocked building.
@@ -1208,15 +1206,6 @@ func _build_town(layout: Array, goals: Dictionary, goal_names: Array) -> void:
 					+ Vector3(0, 4.6, 0) + fwd * (size.z * 0.5 + 0.4))
 			goals[cfg.name] = node
 			goal_names.append(cfg.name)
-		# Group this building with its block peers for merged rendering.
-		var bkey := "%d_%d" % [int(_block_center(cfg.pos.x)), int(_block_center(cfg.pos.z))]
-		if not by_block.has(bkey):
-			by_block[bkey] = []
-		by_block[bkey].append(node)
-
-	# Merge every block's buildings into one MeshInstance3D per block.
-	for bkey in by_block:
-		_merge_block(town, by_block[bkey])
 
 
 # Pack each block with buildings to create a dense "city maze": the goal sits at
@@ -1513,7 +1502,7 @@ func _build_structure(body: Node3D, cfg: Dictionary, size: Vector3, color: Color
 	var style: String = cfg.style
 	_box(body, size, Vector3(0, size.y * 0.5, 0), color)
 	var rows := 2
-	var cols := int(clampf(size.x / 7.0, 1, 3))
+	var cols := int(clampf(size.x / 3.5, 2, 5))
 	match style:
 		"civic":
 			_columns(body, size)
@@ -1749,7 +1738,7 @@ func _build_station(body: Node3D, size: Vector3, color: Color, roof: Color) -> v
 	# Clock tower (kept within the footprint so nothing pokes over a sidewalk).
 	_box(body, Vector3(4, size.y + 6, 4), Vector3(-size.x * 0.5 + 2.5, (size.y + 6) * 0.5, 0), color.lightened(0.05))
 	_cylinder(body, 1.1, 0.3, Vector3(-size.x * 0.5 + 2.5, size.y + 5.2, size.z * 0.5 - 0.6), Color(0.95, 0.95, 0.90)).rotation.x = PI * 0.5
-	_windows(body, size, 1, 2)
+	_windows(body, size, 1, 4)
 	_door(body, size)
 
 
@@ -1908,43 +1897,3 @@ func _mat(color: Color) -> StandardMaterial3D:
 		mat.albedo_color = color
 		_mat_cache[color] = mat
 	return _mat_cache[color]
-
-
-# Merge all buildings in one block into a single MeshInstance3D per block
-# (one surface per unique material across all buildings). CollisionShape3D
-# nodes are left untouched on their original StaticBody3D parents.
-func _merge_block(parent: Node3D, nodes: Array) -> void:
-	var by_mat: Dictionary = {}
-	var to_free: Array = []
-	for node in nodes:
-		_collect_for_merge(node, node.transform, by_mat, to_free)
-	if by_mat.is_empty():
-		return
-	var arr_mesh := ArrayMesh.new()
-	for mat in by_mat:
-		var st: SurfaceTool = by_mat[mat]
-		arr_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, st.commit_to_arrays())
-		arr_mesh.surface_set_material(arr_mesh.get_surface_count() - 1, mat)
-	var merged := MeshInstance3D.new()
-	merged.mesh = arr_mesh
-	parent.add_child(merged)
-	for node in to_free:
-		node.queue_free()
-
-
-func _collect_for_merge(node: Node3D, xform: Transform3D, by_mat: Dictionary, to_free: Array) -> void:
-	for child in node.get_children():
-		if child is MeshInstance3D:
-			var mi: MeshInstance3D = child
-			if mi.mesh == null or mi.material_override == null:
-				continue
-			var local_xform := xform * mi.transform
-			var mat: Material = mi.material_override
-			if not by_mat.has(mat):
-				var st := SurfaceTool.new()
-				st.begin(Mesh.PRIMITIVE_TRIANGLES)
-				by_mat[mat] = st
-			(by_mat[mat] as SurfaceTool).append_from(mi.mesh, 0, local_xform)
-			to_free.append(mi)
-		elif child is Node3D:
-			_collect_for_merge(child, xform * child.transform, by_mat, to_free)

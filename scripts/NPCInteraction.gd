@@ -205,13 +205,13 @@ func _on_heard(text: String) -> void:
 		_greet()
 	elif _state == State.ASK and (t.contains("hello") or t.contains("good morning")):
 		var replies := ["Hello!", "Hi there!", "Good morning!", "Hey!"]
-		var r := replies[randi() % replies.size()]
+		var r: String = replies[randi() % replies.size()]
 		_dialogue.speak(r)
 		_dialogue.show_text("Townsperson", r)
 		_speech.listen()
 	elif _state == State.ASK and t.contains("how are you"):
 		var replies := ["I'm fine!", "I'm good!", "I'm great, thanks!"]
-		var r := replies[randi() % replies.size()]
+		var r: String = replies[randi() % replies.size()]
 		_dialogue.speak(r)
 		_dialogue.show_text("Townsperson", r)
 		_speech.listen()
