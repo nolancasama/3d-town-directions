@@ -191,6 +191,7 @@ func _begin_greet() -> void:
 func _greet() -> void:
 	_state = State.ASK
 	_conversing = true      # now stop walking and engage
+	_dialogue.speak("Yes?")
 	_dialogue.show_text("Townsperson", "Yes?")
 	_face_target(_player)   # turn to face the player once they say "Excuse me"
 	_speech.listen()
@@ -204,15 +205,20 @@ func _on_heard(text: String) -> void:
 		_greet()
 	elif _state == State.ASK and (t.contains("hello") or t.contains("good morning")):
 		var replies := ["Hello!", "Hi there!", "Good morning!", "Hey!"]
-		_dialogue.show_text("Townsperson", replies[randi() % replies.size()])
+		var r := replies[randi() % replies.size()]
+		_dialogue.speak(r)
+		_dialogue.show_text("Townsperson", r)
 		_speech.listen()
 	elif _state == State.ASK and t.contains("how are you"):
 		var replies := ["I'm fine!", "I'm good!", "I'm great, thanks!"]
-		_dialogue.show_text("Townsperson", replies[randi() % replies.size()])
+		var r := replies[randi() % replies.size()]
+		_dialogue.speak(r)
+		_dialogue.show_text("Townsperson", r)
 		_speech.listen()
 	elif _state == State.ASK and t.contains("where is"):
 		var dest := _match_goal(t)
 		if dest == "":
+			_dialogue.speak("Sorry, I don't know that place.")
 			_dialogue.show_text("Townsperson", "Sorry, I don't know that place.")
 			_speech.listen()
 		else:
@@ -225,6 +231,7 @@ func _ask_via_menu() -> void:
 	_state = State.IDLE
 	_speech.stop()
 	_player.set_input_enabled(false)
+	_dialogue.speak("Where would you like to go?")
 	var idx: int = await _dialogue.show_options(
 			"Townsperson", "Where would you like to go?", _goal_names)
 	_player.set_input_enabled(true)
@@ -238,6 +245,7 @@ func _deliver(dest_name: String) -> void:
 	_player.set_input_enabled(false)
 	var target: Node3D = _goals[dest_name]
 
+	_dialogue.speak("It's over there!")
 	_dialogue.show_text("Townsperson", "It's over there!")
 	await _face_target(target)
 	await _raise_arm()

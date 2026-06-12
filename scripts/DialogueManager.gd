@@ -150,7 +150,6 @@ func _build_ui() -> void:
 
 # Show a question with clickable options. Awaitable: returns the chosen index.
 func show_options(speaker: String, prompt: String, options: Array) -> int:
-	_speak(prompt)
 	_speaker_label.text = speaker
 	_text_label.text = prompt
 	_clear_options()
@@ -207,7 +206,6 @@ func clear_timer() -> void:
 
 # Show a plain line of dialogue (no buttons).
 func show_text(speaker: String, text: String) -> void:
-	_speak(text)
 	_speaker_label.text = speaker
 	_text_label.text = text
 	_clear_options()
@@ -223,7 +221,6 @@ func hide_dialogue() -> void:
 
 # Briefly flash a big centered message, then fade it out.
 func show_center_message(text: String) -> void:
-	_speak(text)
 	_center_label.text = text
 	_center_label.modulate.a = 1.0
 	_center_label.visible = true
@@ -266,7 +263,7 @@ func _setup_tts() -> void:
 	_tts_enabled = true
 
 
-func _speak(text: String) -> void:
+func speak(text: String) -> void:
 	if not _tts_enabled:
 		return
 	JavaScriptBridge.eval("window._gd_tts_text = %s;" % JSON.stringify(text), true)
