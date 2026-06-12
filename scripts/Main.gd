@@ -1645,6 +1645,13 @@ func _columns(body: Node3D, size: Vector3) -> void:
 	for i in n:
 		var x := -span * 0.5 + span * float(i) / float(n - 1)
 		_cylinder(body, 0.35, size.y, Vector3(x, size.y * 0.5, z), stone)
+		var col := CollisionShape3D.new()
+		var cshape := CylinderShape3D.new()
+		cshape.radius = 0.35
+		cshape.height = size.y
+		col.shape = cshape
+		col.position = Vector3(x, size.y * 0.5, z)
+		body.add_child(col)
 	_box(body, Vector3(size.x + 0.8, 0.08, 1.8), Vector3(0, 0.04, z), Color(0.82, 0.80, 0.74))  # flush base
 	_box(body, Vector3(size.x + 0.8, 0.7, 2.0), Vector3(0, size.y + 0.35, z - 0.1), stone)
 
@@ -1748,6 +1755,13 @@ func _build_shrine(body: Node3D, size: Vector3, vermilion: Color, wood: Color) -
 	var z := size.z * 0.5 + 1.0
 	for sx in [-1.0, 1.0]:
 		_cylinder(body, 0.3, 5.5, Vector3(sx * (size.x * 0.5 - 1.0), 2.75, z), vermilion)
+		var tcol := CollisionShape3D.new()
+		var tshape := CylinderShape3D.new()
+		tshape.radius = 0.3
+		tshape.height = 5.5
+		tcol.shape = tshape
+		tcol.position = Vector3(sx * (size.x * 0.5 - 1.0), 2.75, z)
+		body.add_child(tcol)
 	_box(body, Vector3(size.x + 1.0, 0.6, 0.6), Vector3(0, 5.4, z), vermilion)
 	_box(body, Vector3(size.x - 1.0, 0.4, 0.4), Vector3(0, 4.6, z), vermilion)
 
