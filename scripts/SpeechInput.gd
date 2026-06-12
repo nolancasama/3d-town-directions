@@ -43,11 +43,24 @@ func _setup_web() -> void:
 				r.maxAlternatives = 1;
 				window._gd_speech_result = '';
 				window._gd_recog_active = false;
+				window._gd_should_listen = false;
 				r.onresult = function (e) {
 					window._gd_speech_result = e.results[e.results.length - 1][0].transcript;
 				};
-				r.onend = function () { window._gd_recog_active = false; };
-				r.onerror = function () { window._gd_recog_active = false; };
+				r.onend = function () {
+					window._gd_recog_active = false;
+					if (window._gd_should_listen) {
+						try { window._gd_recog_active = true; window._gd_recog.start(); } catch (e) {}
+					}
+				};
+				r.onerror = function (e) {
+					window._gd_recog_active = false;
+					if (window._gd_should_listen && e.error !== 'not-allowed' && e.error !== 'service-not-allowed') {
+						setTimeout(function () {
+							try { window._gd_recog_active = true; window._gd_recog.start(); } catch (e) {}
+						}, 250);
+					}
+				};
 				window._gd_recog = r;
 			}
 			return 1;
@@ -80,6 +93,7 @@ func listen() -> void:
 		return
 	JavaScriptBridge.eval("""
 		try {
+			window._gd_should_listen = true;
 			if (window._gd_recog && !window._gd_recog_active) {
 				window._gd_recog_active = true;
 				window._gd_recog.start();
@@ -91,7 +105,7 @@ func listen() -> void:
 func stop() -> void:
 	if not available:
 		return
-	JavaScriptBridge.eval("try { if (window._gd_recog) { window._gd_recog.abort(); } } catch (e) {}", true)
+	JavaScriptBridge.eval("try { window._gd_should_listen = false; if (window._gd_recog) { window._gd_recog.abort(); } } catch (e) {}", true)
 
 
 func _process(_delta: float) -> void:
