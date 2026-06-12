@@ -47,18 +47,20 @@ func _setup_web() -> void:
 				r.onresult = function (e) {
 					window._gd_speech_result = e.results[e.results.length - 1][0].transcript;
 				};
+				r.onerror = function (e) {
+					window._gd_recog_active = false;
+					if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+						window._gd_should_listen = false;
+					}
+				};
 				r.onend = function () {
 					window._gd_recog_active = false;
 					if (window._gd_should_listen) {
-						try { window._gd_recog_active = true; window._gd_recog.start(); } catch (e) {}
-					}
-				};
-				r.onerror = function (e) {
-					window._gd_recog_active = false;
-					if (window._gd_should_listen && e.error !== 'not-allowed' && e.error !== 'service-not-allowed') {
 						setTimeout(function () {
-							try { window._gd_recog_active = true; window._gd_recog.start(); } catch (e) {}
-						}, 250);
+							if (window._gd_should_listen && !window._gd_recog_active) {
+								try { window._gd_recog_active = true; window._gd_recog.start(); } catch (e) {}
+							}
+						}, 150);
 					}
 				};
 				window._gd_recog = r;

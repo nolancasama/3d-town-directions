@@ -184,8 +184,8 @@ func _play_intro(player: PlayerController) -> void:
 	_intro_cam.current = true
 
 	var player_start := player.global_position
-	# Player faces south (toward camera) so the reveal shot shows their face.
-	player.rotation.y = PI
+	# Player faces north (toward town) from the moment he steps off the bus.
+	player.rotation.y = 0.0
 	# Hide player for the orbital shot; they step off the bus at the midpoint.
 	player.visible = false
 	# Hide the greeter NPC so it doesn't walk through the cinematic frame.
@@ -214,13 +214,13 @@ func _play_intro(player: PlayerController) -> void:
 	# At the midpoint the player steps off the bus and walks to their start position.
 	await get_tree().create_timer(5.5).timeout
 	player.global_position = Vector3(bus.position.x + 2.5, 0.0, bus.position.z - 1.5)
-	player.rotation.y = PI
+	player.rotation.y = 0.0
 	player.visible = true
 	var wt := create_tween()
 	wt.set_trans(Tween.TRANS_LINEAR)
 	wt.tween_property(player, "global_position", player_start, 5.0)
 	await get_tree().create_timer(5.5).timeout
-	player.rotation.y = PI   # re-face south so push-in shows Matsubara's face
+	player.rotation.y = PI  # face south — toward the camera for his introduction
 
 	# 2) Hard cut to side bus shot.
 	_intro_cam.position = Vector3(0, 2.0, 32)
@@ -262,8 +262,8 @@ func _play_intro(player: PlayerController) -> void:
 	await _intro_move(Vector3(0, 2.0, 32), face_pos, focus, focus, 5.0)
 	await get_tree().create_timer(5.0).timeout
 
-	# 5) Town pan shots — turn Matsubara north before the camera leaves him.
-	player.rotation.y = 0.0
+	# 5) Town pan shots — keep Matsubara south so he still faces camera when it returns in step 6.
+	player.rotation.y = PI
 	_dialogue.show_text("Matsubara kun", "Wow! America is so big!")
 	await _intro_move(Vector3(0, 4, -12), Vector3(0, 4, -12),
 			Vector3(-35, 5, -54), Vector3(35, 5, -54), 3.8)
@@ -309,6 +309,8 @@ func _play_intro(player: PlayerController) -> void:
 	# 8) Greeter NPC re-appears and resumes patrolling; camera pans to reveal them.
 	if _greeter_npc != null:
 		_greeter_npc.visible = true
+	# Keep facing south — the tween at handoff will rotate him north.
+	player.rotation.y = PI
 	await _intro_move(close_pos, Vector3(12, 3, 26),
 			close_look, Vector3(5, 1.5, 18), 2.5)
 	await get_tree().create_timer(2.0).timeout
@@ -316,7 +318,6 @@ func _play_intro(player: PlayerController) -> void:
 	# Unblock NPCs and hand control back to the player.
 	NPCInteraction._cinematic = false
 	_fade_out_intro_title()
-	player.rotation.y = 0.0
 	player.visible = true
 	_intro_cam.queue_free()
 	_intro_cam = null
