@@ -1172,6 +1172,7 @@ func _build_town(layout: Array, goals: Dictionary, goal_names: Array) -> void:
 		# Props body in world space) line up with the meshes.
 		node.rotation.y = 0.0 if cfg.style == "park" else _park_or_street_facing(cfg.pos)
 		town.add_child(node)
+		_merge_meshes(node)
 		if cfg.get("goal", false):
 			var size: Vector3 = cfg.size
 			# The goal is the patch of ground right in front of the door (building
@@ -1883,3 +1884,42 @@ func _mat(color: Color) -> StandardMaterial3D:
 		mat.albedo_color = color
 		_mat_cache[color] = mat
 	return _mat_cache[color]
+
+
+# Merge all MeshInstance3D descendants of root into a single MeshInstance3D
+# (one surface per unique material). Reduces per-building draw calls from
+# 15-45 down to ~6-8. CollisionShape3D nodes are left untouched.
+func _merge_meshes(root: Node3D) -> void:
+	var by_mat: Dictionary = {}
+	var to_free: Array = []
+	_collect_for_merge(root, Transform3D.IDENTITY, by_mat, to_free)
+	if by_mat.is_empty():
+		return
+	var arr_mesh := ArrayMesh.new()
+	for mat in by_mat:
+		var st: SurfaceTool = by_mat[mat]
+		arr_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, st.commit_to_arrays())
+		arr_mesh.surface_set_material(arr_mesh.get_surface_count() - 1, mat)
+	var merged := MeshInstance3D.new()
+	merged.mesh = arr_mesh
+	root.add_child(merged)
+	for node in to_free:
+		node.queue_free()
+
+
+func _collect_for_merge(node: Node3D, xform: Transform3D, by_mat: Dictionary, to_free: Array) -> void:
+	for child in node.get_children():
+		if child is MeshInstance3D:
+			var mi: MeshInstance3D = child
+			if mi.mesh == null or mi.material_override == null:
+				continue
+			var local_xform := xform * mi.transform
+			var mat: Material = mi.material_override
+			if not by_mat.has(mat):
+				var st := SurfaceTool.new()
+				st.begin(Mesh.PRIMITIVE_TRIANGLES)
+				by_mat[mat] = st
+			(by_mat[mat] as SurfaceTool).append_from(mi.mesh, 0, local_xform)
+			to_free.append(mi)
+		elif child is Node3D:
+			_collect_for_merge(child, xform * child.transform, by_mat, to_free)
