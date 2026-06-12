@@ -200,8 +200,12 @@ func _on_heard(text: String) -> void:
 	if _active != self or _cinematic:
 		return
 	var t := _clean(text)
-	if _state == State.GREET and (t.contains("excuse me") or t.contains("pardon me")):
+	if _state == State.GREET and (t.contains("excuse me") or t.contains("pardon me") or t.contains("hello") or t.contains("good morning")):
 		_greet()
+	elif _state == State.ASK and (t.contains("hello") or t.contains("good morning")):
+		var replies := ["Hello!", "Hi there!", "Good morning!", "Hey!"]
+		_dialogue.show_text("Townsperson", replies[randi() % replies.size()])
+		_speech.listen()
 	elif _state == State.ASK and t.contains("how are you"):
 		var replies := ["I'm fine!", "I'm good!", "I'm great, thanks!"]
 		_dialogue.show_text("Townsperson", replies[randi() % replies.size()])
