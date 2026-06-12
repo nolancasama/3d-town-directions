@@ -1503,7 +1503,7 @@ func _build_structure(body: Node3D, cfg: Dictionary, size: Vector3, color: Color
 	var style: String = cfg.style
 	_box(body, size, Vector3(0, size.y * 0.5, 0), color)
 	var rows := 2
-	var cols := int(clampf(size.x / 3.5, 2, 5))
+	var cols := int(clampf(size.x / 7.0, 1, 3))
 	match style:
 		"civic":
 			_columns(body, size)
@@ -1725,7 +1725,7 @@ func _build_pool(body: Node3D, size: Vector3, deck: Color, water: Color) -> void
 	# Deck bottom pushed to y=-0.15 so it never sits coplanar with the ground plane (y=0),
 	# which would cause z-fighting / shimmering on the deck surface.
 	_box(body, Vector3(size.x, 0.4, size.z), Vector3(0, 0.05, 0), deck)
-	_box(body, Vector3(size.x - 5, 0.25, size.z - 5), Vector3(0, 0.085, 1), water)   # water top at y=0.21, ~4 cm below deck rim
+	_box(body, Vector3(size.x - 5, 0.25, size.z - 5), Vector3(0, 0.13, 1), water)   # water top at y=0.255, just above deck rim
 	_box(body, Vector3(size.x * 0.4, 3.0, 4), Vector3(-size.x * 0.25, 1.5, -size.z * 0.5 + 2), Color(0.85, 0.86, 0.88))  # changing rooms
 	# A simple fence of posts around the deck.
 	for i in 10:
@@ -1739,7 +1739,7 @@ func _build_station(body: Node3D, size: Vector3, color: Color, roof: Color) -> v
 	# Clock tower (kept within the footprint so nothing pokes over a sidewalk).
 	_box(body, Vector3(4, size.y + 6, 4), Vector3(-size.x * 0.5 + 2.5, (size.y + 6) * 0.5, 0), color.lightened(0.05))
 	_cylinder(body, 1.1, 0.3, Vector3(-size.x * 0.5 + 2.5, size.y + 5.2, size.z * 0.5 - 0.6), Color(0.95, 0.95, 0.90)).rotation.x = PI * 0.5
-	_windows(body, size, 1, 4)
+	_windows(body, size, 1, 2)
 	_door(body, size)
 
 
