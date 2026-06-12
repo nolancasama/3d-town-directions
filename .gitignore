@@ -1,0 +1,12 @@
+# Godot generated files
+.godot/
+*.translation
+
+# Import files
+*.import
+
+# Export config (may contain paths/keys)
+export_presets.cfg
+
+# Build output
+build/
