@@ -1361,6 +1361,10 @@ func _build_town(layout: Array, goals: Dictionary, goal_names: Array) -> void:
 	town.name = "Town"
 	add_child(town)
 
+	# Footprints of every solid building, used to pick house facings that point
+	# at a road the house actually has a clear shot to (no neighbour in front).
+	var all_fps := _building_footprints(layout)
+
 	for cfg in layout:
 		# Courtyard greenery placed in the (road-less) centre of a block instead
 		# of a landlocked building.
@@ -1373,8 +1377,16 @@ func _build_town(layout: Array, goals: Dictionary, goal_names: Array) -> void:
 		var node := _spawn_building(cfg)
 		node.position = cfg.pos
 		# Park stays unrotated so its tree/bench/fountain colliders (added to the
-		# Props body in world space) line up with the meshes.
-		node.rotation.y = 0.0 if cfg.style == "park" else _park_or_street_facing(cfg.pos)
+		# Props body in world space) line up with the meshes. Goal buildings keep
+		# their inner-street facing (their door/goal_spot logic depends on it).
+		# Filler houses face the nearest road they have a clear path to, so none
+		# end up staring at a neighbour's back wall.
+		if cfg.style == "park":
+			node.rotation.y = 0.0
+		elif cfg.get("goal", false):
+			node.rotation.y = _park_or_street_facing(cfg.pos)
+		else:
+			node.rotation.y = _clear_facing(_footprint(cfg), all_fps)
 		town.add_child(node)
 		if cfg.get("goal", false):
 			var size: Vector3 = cfg.size
@@ -1653,25 +1665,99 @@ func _facing(pos: Vector3) -> float:
 	return 0.0 if nz > pos.z else PI
 
 
-# Buildings in the four blocks directly adjacent to the central Park always face
-# either the Park (near half) or the opposite outer road (far half). This prevents
-# side-road tie-breaks from rotating buildings to face each other's back walls.
+# Buildings in the row directly fronting the central Park face the Park (so the
+# green has a consistent storefront) instead of being turned toward a side street
+# by the nearest-street tie-break. Everything else just faces its street. Used for
+# goal-building facing and for footprint orientation during placement.
+const PARK_LAT := 20.0   # Park half-width: how far a frontage can sit off-axis
 func _park_or_street_facing(pos: Vector3) -> float:
-	var HB2 := HALF_BLOCK * 2.0   # 54 — block centre distance from park road
-	var HB3 := HALF_BLOCK * 3.0   # 81 — outer road of each park-adjacent block
-	# South block (|x|<27, 27<z<81): face north toward Park OR south toward outer road.
-	if absf(pos.x) < HALF_BLOCK and pos.z > HALF_BLOCK and pos.z < HB3:
-		return PI if pos.z < HB2 else 0.0
-	# North block (|x|<27, -81<z<-27): face south toward Park OR north toward outer road.
-	if absf(pos.x) < HALF_BLOCK and pos.z < -HALF_BLOCK and pos.z > -HB3:
-		return 0.0 if pos.z > -HB2 else PI
-	# East block (|z|<27, 27<x<81): face west toward Park OR east toward outer road.
-	if absf(pos.z) < HALF_BLOCK and pos.x > HALF_BLOCK and pos.x < HB3:
-		return -PI * 0.5 if pos.x < HB2 else PI * 0.5
-	# West block (|z|<27, -81<x<-27): face east toward Park OR west toward outer road.
-	if absf(pos.z) < HALF_BLOCK and pos.x < -HALF_BLOCK and pos.x > -HB3:
-		return PI * 0.5 if pos.x > -HB2 else -PI * 0.5
+	# South / north blocks (Park lies along the z axis from them).
+	if absf(pos.x) <= PARK_LAT:
+		if pos.z > HALF_BLOCK and pos.z < 54.0:
+			return PI            # south block -> face north toward the Park
+		if pos.z < -HALF_BLOCK and pos.z > -54.0:
+			return 0.0           # north block -> face south toward the Park
+	# East / west blocks (Park lies along the x axis from them).
+	if absf(pos.z) <= PARK_LAT:
+		if pos.x > HALF_BLOCK and pos.x < 54.0:
+			return -PI * 0.5     # east block -> face west toward the Park
+		if pos.x < -HALF_BLOCK and pos.x > -54.0:
+			return PI * 0.5      # west block -> face east toward the Park
 	return _facing(pos)
+
+
+# Axis-aligned footprints of every solid building (goals + filler houses). The
+# Park and courtyard props are open space, so they're skipped.
+func _building_footprints(layout: Array) -> Array:
+	var fps := []
+	for cfg in layout:
+		if cfg.has("prop"):
+			continue
+		if cfg.get("style", "") == "park":
+			continue
+		fps.append(_footprint(cfg))
+	return fps
+
+
+# Face the nearest road this building has a CLEAR shot to (no other building
+# sitting in the strip between its front face and that road). Falls back to the
+# plain nearest road if every side is blocked. Front is local +Z, so the yaws
+# are: +z -> 0, -z -> PI, +x -> PI/2, -x -> -PI/2.
+func _clear_facing(fp: Dictionary, fps: Array) -> float:
+	var bcx := _block_center(fp.x)
+	var bcz := _block_center(fp.z)
+	var cands := [
+		{"yaw": 0.0,       "axis": "z", "sign":  1.0, "road": bcz + HALF_BLOCK},
+		{"yaw": PI,        "axis": "z", "sign": -1.0, "road": bcz - HALF_BLOCK},
+		{"yaw": PI * 0.5,  "axis": "x", "sign":  1.0, "road": bcx + HALF_BLOCK},
+		{"yaw": -PI * 0.5, "axis": "x", "sign": -1.0, "road": bcx - HALF_BLOCK},
+	]
+	var best_clear_yaw := 0.0
+	var best_clear_dist := INF
+	var best_any_yaw := 0.0
+	var best_any_dist := INF
+	for c in cands:
+		var dist: float = absf(c.road - fp.x) if c.axis == "x" else absf(c.road - fp.z)
+		if dist < best_any_dist:
+			best_any_dist = dist
+			best_any_yaw = c.yaw
+		if _front_clear(fp, c, fps) and dist < best_clear_dist:
+			best_clear_dist = dist
+			best_clear_yaw = c.yaw
+	return best_clear_yaw if best_clear_dist < INF else best_any_yaw
+
+
+# True if nothing blocks the strip between this building's front face (in the
+# candidate direction `c`) and its road.
+func _front_clear(fp: Dictionary, c: Dictionary, fps: Array) -> bool:
+	var eps := 0.4
+	for o in fps:
+		if is_equal_approx(o.x, fp.x) and is_equal_approx(o.z, fp.z):
+			continue   # skip self
+		if c.axis == "x":
+			# Must overlap the front width (z) to be "in front".
+			if o.z + o.hz <= fp.z - fp.hz or o.z - o.hz >= fp.z + fp.hz:
+				continue
+			if c.sign > 0.0:
+				var face: float = fp.x + fp.hx
+				if o.x + o.hx > face + eps and o.x - o.hx < c.road:
+					return false
+			else:
+				var face_n: float = fp.x - fp.hx
+				if o.x - o.hx < face_n - eps and o.x + o.hx > c.road:
+					return false
+		else:
+			if o.x + o.hx <= fp.x - fp.hx or o.x - o.hx >= fp.x + fp.hx:
+				continue
+			if c.sign > 0.0:
+				var facez: float = fp.z + fp.hz
+				if o.z + o.hz > facez + eps and o.z - o.hz < c.road:
+					return false
+			else:
+				var facez_n: float = fp.z - fp.hz
+				if o.z - o.hz < facez_n - eps and o.z + o.hz > c.road:
+					return false
+	return true
 
 
 func _nearest(v: float) -> float:
