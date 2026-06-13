@@ -1794,11 +1794,12 @@ func _spawn_building(cfg: Dictionary) -> Node3D:
 		_:
 			_build_structure(body, cfg, size, color, accent)
 
-	# Most styles want a solid collision box (park stays walkable; gas uses a smaller footprint).
+	# Most styles want a solid collision box covering the full footprint.
+	# Park stays walkable. Gas station gets per-piece boxes matching its visual geometry.
 	if style != "park" and style != "gas":
 		_collide(body, size)
 	elif style == "gas":
-		_collide(body, Vector3(size.x * 0.4, size.y, size.z * 0.4))
+		_collide_gas(body, size)
 	return body
 
 
@@ -2239,6 +2240,26 @@ func _collide(body: Node3D, size: Vector3) -> void:
 	col.shape = shape
 	col.position.y = size.y * 0.5
 	body.add_child(col)
+
+
+func _collide_gas(body: Node3D, size: Vector3) -> void:
+	# Kiosk — matches _build_gas kiosk box exactly.
+	var ks := Vector3(size.x * 0.4, 3.0, size.z * 0.4)
+	var kc := CollisionShape3D.new()
+	var kb := BoxShape3D.new()
+	kb.size = ks
+	kc.shape = kb
+	kc.position = Vector3(0, ks.y * 0.5, -size.z * 0.2)
+	body.add_child(kc)
+	# Pump islands — matches _build_gas pump boxes.
+	for sx in [-1.0, 1.0]:
+		var ps := Vector3(1.0, 1.6, 0.8)
+		var pc := CollisionShape3D.new()
+		var pb := BoxShape3D.new()
+		pb.size = ps
+		pc.shape = pb
+		pc.position = Vector3(sx * 2.5, ps.y * 0.5, size.z * 0.2)
+		body.add_child(pc)
 
 
 func _box(parent: Node3D, size: Vector3, pos: Vector3, color: Color) -> MeshInstance3D:
