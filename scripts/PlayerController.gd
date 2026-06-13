@@ -26,6 +26,11 @@ var _camera_pivot: Node3D
 var _input_enabled: bool = true
 var _body: Humanoid         # the visible figure, for walk animation
 
+signal walk_done
+var _walk_active: bool = false
+var _walk_target: Vector3
+var _walk_speed: float
+
 
 func _ready() -> void:
 	_build_collider()
@@ -71,20 +76,37 @@ func _build_camera_rig() -> void:
 
 
 func _physics_process(delta: float) -> void:
-	if _input_enabled:
-		# A/Left and D/Right turn the whole body (the camera follows).
-		var turn := Input.get_action_strength("turn_left") \
-				- Input.get_action_strength("turn_right")
-		rotate_y(turn * turn_speed * delta)
+	if _walk_active:
+		var to := _walk_target - global_position
+		to.y = 0.0
+		var dist := to.length()
+		if dist < 0.25:
+			velocity.x = 0.0
+			velocity.z = 0.0
+			global_position.x = _walk_target.x
+			global_position.z = _walk_target.z
+			_walk_active = false
+			walk_done.emit()
+		else:
+			var dir := to.normalized()
+			velocity.x = dir.x * _walk_speed
+			velocity.z = dir.z * _walk_speed
+	else:
+		var focused := get_viewport().gui_get_focus_owner()
+		var typing := focused != null and focused is LineEdit
 
-	# W/Up and S/Down move along the body's facing direction (forward is -Z).
-	var fwd := 0.0
-	if _input_enabled:
-		fwd = Input.get_action_strength("move_forward") \
-				- Input.get_action_strength("move_back")
-	var direction := -transform.basis.z * fwd
-	velocity.x = direction.x * move_speed
-	velocity.z = direction.z * move_speed
+		if _input_enabled and not typing:
+			var turn := Input.get_action_strength("turn_left") \
+					- Input.get_action_strength("turn_right")
+			rotate_y(turn * turn_speed * delta)
+
+		var fwd := 0.0
+		if _input_enabled and not typing:
+			fwd = Input.get_action_strength("move_forward") \
+					- Input.get_action_strength("move_back")
+		var direction := -transform.basis.z * fwd
+		velocity.x = direction.x * move_speed
+		velocity.z = direction.z * move_speed
 
 	if not is_on_floor():
 		velocity.y -= gravity * delta
@@ -92,8 +114,6 @@ func _physics_process(delta: float) -> void:
 		velocity.y = 0.0
 
 	move_and_slide()
-
-	# Drive the walk animation from the actual horizontal speed.
 	_body.walk_speed = Vector2(velocity.x, velocity.z).length()
 
 
@@ -102,3 +122,15 @@ func set_input_enabled(enabled: bool) -> void:
 	_input_enabled = enabled
 	if not enabled:
 		velocity = Vector3.ZERO
+
+
+func walk_to(target: Vector3, speed: float = -1.0) -> void:
+	_walk_target = target
+	_walk_speed = speed if speed > 0.0 else move_speed
+	_walk_active = true
+
+
+func stop_walk() -> void:
+	_walk_active = false
+	velocity.x = 0.0
+	velocity.z = 0.0

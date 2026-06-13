@@ -122,7 +122,7 @@ var _cine_skip: bool = false
 var _orbit_tween: Tween = null
 var _orbit_a1: float = 0.0
 var _walk_finished: bool = false   # instance var: GDScript lambdas capture locals by VALUE,
-                                   # so the walk_done callback must write to a member, not a local.
+								   # so the walk_done callback must write to a member, not a local.
 
 
 func _ready() -> void:
@@ -1126,9 +1126,17 @@ func _build_sidewalks(roads: Node3D) -> void:
 			for seg in _segments():
 				_slab(roads, Vector3(SW_W, 0.10, seg.y - seg.x),
 						Vector3(x, 0.0, (seg.x + seg.y) * 0.5), SIDEWALK)
+	# West outer sidewalk: fill E-W road gaps with asphalt (road continues through).
+	var west_sw_x := -135.0 - SW_OFF
+	for gap_z in GRID:
+		_slab(roads, Vector3(SW_W, 0.10, ROAD_W), Vector3(west_sw_x, 0.0, gap_z), ASPHALT)
 	for gz in GRID:
 		for side in [-1.0, 1.0]:
 			var z: float = gz + side * SW_OFF
+			# South outer sidewalk (beach edge): one continuous slab, no gaps.
+			if gz == 135.0 and side == 1.0:
+				_slab(roads, Vector3(270.0, 0.10, SW_W), Vector3(0, 0.0, z), SIDEWALK)
+				continue
 			for seg in _segments():
 				if seg.x >= 134.9 or seg.y <= -134.9:
 					continue   # skip stubs east/west of the outermost N-S grid lines
@@ -1173,6 +1181,8 @@ func _build_crosswalks(roads: Node3D, gx: float, gz: float) -> void:
 			continue
 		_crosswalk(roads, Vector3(gx + sx * SW_OFF, 0.06, gz), true)   # across the E-W road
 	for sz in [-1.0, 1.0]:
+		if gz == 135.0 and sz == 1.0:
+			continue
 		_crosswalk(roads, Vector3(gx, 0.06, gz + sz * SW_OFF), false)  # across the N-S road
 
 
@@ -1348,7 +1358,7 @@ func _build_town(layout: Array, goals: Dictionary, goal_names: Array) -> void:
 			# Buildings with facade icons (cross, burger) — added as hidden nodes
 			# under _icons_root so they're excluded from baking and can be revealed
 			# individually when the player discovers that building.
-			if cfg.name in ["Hospital", "Restaurant", "Drugstore", "Church", "Bakery", "Police Station", "Bookstore"]:
+			if cfg.name in ["Hospital", "Restaurant", "Drugstore", "Church", "Bakery", "Police Station", "Bookstore", "Starbucks"]:
 				_add_icon_for_building(cfg.name, size, node)
 
 
@@ -1873,6 +1883,8 @@ func _add_icon_for_building(bname: String, size: Vector3, body: Node3D) -> void:
 			_sheriff_badge(icon, size)
 		"Bookstore":
 			_bookstore_book(icon, size)
+		"Starbucks":
+			_coffee_cup(icon, size)
 	icon.visible = false
 	_icon_nodes[bname] = icon
 
@@ -1896,39 +1908,67 @@ func _church_cross_icon(body: Node3D, size: Vector3) -> void:
 func _baguette(body: Node3D, size: Vector3) -> void:
 	var z := size.z * 0.5 + 0.12
 	var y := size.y - 1.2
+	var tilt := PI * 0.25   # 45 degrees
 	var m := MeshInstance3D.new()
 	var cap := CapsuleMesh.new()
-	cap.radius = 0.20
-	cap.height = 2.8
+	cap.radius = 0.50
+	cap.height = 3.0
 	m.mesh = cap
 	m.material_override = _mat(Color(0.82, 0.64, 0.30))
-	m.position = Vector3(0.15, y, z)
-	m.rotation.z = 0.18
-	m.scale = Vector3(1.0, 1.0, 0.30)
+	m.position = Vector3(0, y, z)
+	m.rotation.z = tilt
+	m.scale = Vector3(1.0, 1.0, 0.35)
 	body.add_child(m)
 	for i in 3:
-		var t := -0.52 + i * 0.52
-		_box(body, Vector3(0.52, 0.10, 0.08),
-				Vector3(0.15 + t * sin(0.18) * 0.5, y + t * cos(0.18) * 0.5, z + 0.16),
-				Color(0.58, 0.38, 0.16))
+		var t := -0.72 + i * 0.72
+		var cut := Node3D.new()
+		cut.position = Vector3(-t * sin(tilt), y + t * cos(tilt), z + 0.24)
+		cut.rotation.z = tilt
+		body.add_child(cut)
+		_box(cut, Vector3(0.44, 0.10, 0.08), Vector3(0, 0, 0), Color(0.55, 0.35, 0.14))
 
 
 func _sheriff_badge(body: Node3D, size: Vector3) -> void:
 	var z := size.z * 0.5 + 0.1
 	var y := size.y - 1.4
-	var gold := Color(0.90, 0.76, 0.18)
-	var dark := Color(0.40, 0.28, 0.06)
-	_box(body, Vector3(1.5, 1.5, 0.14), Vector3(0, y, z), dark)
-	var star := Node3D.new()
-	star.position = Vector3(0, y, z + 0.09)
-	body.add_child(star)
-	for i in 5:
-		var ang := float(i) * TAU / 5.0
-		var arm := Node3D.new()
-		arm.rotation.z = -ang
-		star.add_child(arm)
-		_box(arm, Vector3(0.20, 0.72, 0.12), Vector3(0, 0.37, 0), gold)
-	_box(body, Vector3(0.32, 0.32, 0.20), Vector3(0, y, z + 0.12), gold)
+	var gold := Color(0.95, 0.78, 0.10)
+	var R := 0.80   # center to each point
+	# Three bars at 0°/60°/120° overlap to form the six-pointed star body.
+	for i in 3:
+		var pivot := Node3D.new()
+		pivot.position = Vector3(0, y, z)
+		pivot.rotation.z = i * PI / 3.0
+		body.add_child(pivot)
+		_box(pivot, Vector3(0.40, R * 2.0, 0.14), Vector3(0, 0, 0), gold)
+	# Small circle disc at each of the 6 tips (cylinder rotated to face front).
+	for i in 3:
+		var angle := i * PI / 3.0
+		for sgn in [1.0, -1.0]:
+			var px: float = sgn * sin(angle) * R
+			var py: float = sgn * cos(angle) * R
+			var cp := Node3D.new()
+			cp.position = Vector3(px, y + py, z + 0.02)
+			cp.rotation.x = PI * 0.5
+			body.add_child(cp)
+			_cylinder(cp, 0.22, 0.16, Vector3(0, 0, 0), gold)
+
+
+func _coffee_cup(body: Node3D, size: Vector3) -> void:
+	var z      := size.z * 0.5 + 0.1
+	var y      := size.y - 1.4
+	var white  := Color(1.00, 1.00, 1.00)
+	var dark_g := Color(0.06, 0.28, 0.18)
+	var coffee := Color(0.20, 0.11, 0.05)
+	var steam  := Color(0.88, 0.88, 0.90)
+	# Cup body (white)
+	_box(body, Vector3(1.30, 1.70, 0.18), Vector3(0, y, z), white)
+	# Collar / rim
+	_box(body, Vector3(1.50, 0.16, 0.22), Vector3(0, y + 0.85, z), dark_g)
+	# Dark coffee surface near the top
+	_box(body, Vector3(1.10, 0.28, 0.22), Vector3(0, y + 0.64, z + 0.02), coffee)
+	# Steam wisps above the cup
+	_box(body, Vector3(0.07, 0.38, 0.10), Vector3(-0.22, y + 1.12, z), steam)
+	_box(body, Vector3(0.07, 0.38, 0.10), Vector3( 0.18, y + 1.22, z), steam)
 
 
 func _bookstore_book(body: Node3D, size: Vector3) -> void:

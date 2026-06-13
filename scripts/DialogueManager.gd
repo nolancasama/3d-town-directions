@@ -171,13 +171,20 @@ func _build_ui() -> void:
 	_options_grid.add_theme_constant_override("v_separation", 6)
 	_options_scroll.add_child(_options_grid)
 
-	# --- Text input (keyboard pipeline, inside the dialogue panel) -----------
+	# --- Text input (keyboard pipeline, below the dialogue panel) -----------
 	_text_input = LineEdit.new()
 	_text_input.placeholder_text = "Type your question here, then press Enter..."
-	_text_input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_text_input.add_theme_font_size_override("font_size", 22)
+	_text_input.add_theme_font_size_override("font_size", 20)
+	_text_input.anchor_left = 0.0
+	_text_input.anchor_top = 1.0
+	_text_input.anchor_right = 1.0
+	_text_input.anchor_bottom = 1.0
+	_text_input.offset_left = 40
+	_text_input.offset_right = -40
+	_text_input.offset_top = -38
+	_text_input.offset_bottom = -2
 	_text_input.visible = false
-	vbox.add_child(_text_input)
+	add_child(_text_input)
 	_text_input.text_submitted.connect(_on_text_input_submitted)
 
 

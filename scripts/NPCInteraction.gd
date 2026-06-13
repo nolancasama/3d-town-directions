@@ -266,13 +266,10 @@ func _deliver(dest_name: String) -> void:
 	_dialogue.show_text("Townsperson", "It's over there!")
 	await _face_target(target)
 	await _raise_arm()
-	# Arm stays pointing through the pan out and the hold...
 	await _camera_focus.pan_to(target, global_position)
-	await _camera_focus.pan_to_roof(target)
 	await get_tree().create_timer(POINT_HOLD_SECONDS).timeout
-	# ...then it comes back down as the camera pans back to the player.
-	_lower_arm()
 	await _camera_focus.pan_back()
+	await _lower_arm()
 
 	_goal_manager.set_target(dest_name, target)
 	_dialogue.hide_dialogue()
