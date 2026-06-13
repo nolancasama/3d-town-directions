@@ -2434,7 +2434,7 @@ func _build_mall(terrain: Node3D) -> void:
 	sign_lbl.billboard = BaseMaterial3D.BILLBOARD_DISABLED
 	sign_lbl.no_depth_test = false
 	sign_lbl.position = Vector3(-mw.x * 0.5 - 0.22, mw.y + 0.9, 0.0)
-	sign_lbl.rotation.y = PI * 0.5
+	sign_lbl.rotation.y = -PI * 0.5
 	sign_lbl.visible = false
 	mall.add_child(sign_lbl)
 	_icon_nodes["Shopping Mall"] = sign_lbl
