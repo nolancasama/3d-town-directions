@@ -895,6 +895,34 @@ func _spawn_npcs(dialogue: DialogueManager, camera_focus: CameraFocusManager,
 			PackedVector3Array([Vector3(-6, 0, 18), Vector3(8, 0, 18)]),
 			palette[k % palette.size()],
 			dialogue, camera_focus, player, goal, goals, goal_names, speech)
+	k += 1
+
+	# One NPC on each outer boundary sidewalk.
+	var outer_z := 135.0 + SW_OFF   # south/north outer sidewalk z offset
+	var outer_x := 135.0 + SW_OFF   # east/west outer sidewalk x offset
+	# North outer sidewalk (patrols east-west at z = -outer_z)
+	_make_npc(Vector3(0, 0, -outer_z),
+			PackedVector3Array([Vector3(-40, 0, -outer_z), Vector3(40, 0, -outer_z)]),
+			palette[k % palette.size()],
+			dialogue, camera_focus, player, goal, goals, goal_names, speech)
+	k += 1
+	# South outer sidewalk (patrols east-west at z = +outer_z)
+	_make_npc(Vector3(0, 0, outer_z),
+			PackedVector3Array([Vector3(-40, 0, outer_z), Vector3(40, 0, outer_z)]),
+			palette[k % palette.size()],
+			dialogue, camera_focus, player, goal, goals, goal_names, speech)
+	k += 1
+	# West outer sidewalk (patrols north-south at x = -outer_x)
+	_make_npc(Vector3(-outer_x, 0, 0),
+			PackedVector3Array([Vector3(-outer_x, 0, -40), Vector3(-outer_x, 0, 40)]),
+			palette[k % palette.size()],
+			dialogue, camera_focus, player, goal, goals, goal_names, speech)
+	k += 1
+	# East outer sidewalk (patrols north-south at x = +outer_x)
+	_make_npc(Vector3(outer_x, 0, 0),
+			PackedVector3Array([Vector3(outer_x, 0, -40), Vector3(outer_x, 0, 40)]),
+			palette[k % palette.size()],
+			dialogue, camera_focus, player, goal, goals, goal_names, speech)
 
 
 func _make_npc(pos: Vector3, p: PackedVector3Array, c: Array,
@@ -2287,14 +2315,15 @@ func _build_train_tracks(terrain: Node3D) -> void:
 		_box(terrain, Vector3(0.45, pil_h, 0.45), pil_p, Color(0.75, 0.74, 0.72))
 		_prop_collider(Vector3(px, 0.0, z_tr + 6.5), 0.28, pil_h)
 
-	# Impassable collision barrier along the track line.
+	# Impassable collision barrier spanning the full track + ballast zone
+	# (z = -147.5 to -153.0) so the player cannot enter from the platform edge.
 	var barrier := StaticBody3D.new()
 	barrier.name = "TrackBarrier"
 	var col := CollisionShape3D.new()
 	var shape := BoxShape3D.new()
-	shape.size = Vector3(span, 3.5, 1.2)
+	shape.size = Vector3(span, 3.5, 5.5)
 	col.shape = shape
-	col.position = Vector3(0, 1.75, z_tr)
+	col.position = Vector3(0, 1.75, z_tr - 0.25)
 	barrier.add_child(col)
 	add_child(barrier)
 
@@ -2394,6 +2423,21 @@ func _build_mall(terrain: Node3D) -> void:
 	_box(mall, Vector3(0.9, 0.18, 5.0), Vector3(wx - 0.27, 4.0, 0), mall_accent)
 	# Rooftop sign on west face
 	_box(mall, Vector3(0.4, 1.8, 20.0), Vector3(-mw.x * 0.5, mw.y + 0.9, 0), sign_red)
+	# "Seven Park" text on the sign — hidden until the mall is discovered.
+	var sign_lbl := Label3D.new()
+	sign_lbl.text = "Seven Park"
+	sign_lbl.font_size = 160
+	sign_lbl.pixel_size = 0.009
+	sign_lbl.modulate = Color(1.0, 1.0, 1.0)
+	sign_lbl.outline_size = 10
+	sign_lbl.outline_modulate = Color(0.25, 0.03, 0.03)
+	sign_lbl.billboard = BaseMaterial3D.BILLBOARD_DISABLED
+	sign_lbl.no_depth_test = false
+	sign_lbl.position = Vector3(-mw.x * 0.5 - 0.22, mw.y + 0.9, 0.0)
+	sign_lbl.rotation.y = PI * 0.5
+	sign_lbl.visible = false
+	mall.add_child(sign_lbl)
+	_icon_nodes["Shopping Mall"] = sign_lbl
 
 	# Lampposts flanking the mall entrance and along the parking lot
 	for lz in [-35.0, -19.0]:

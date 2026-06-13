@@ -142,9 +142,6 @@ func _on_reached() -> void:
 	_times[dest_name] = time_str
 	_dialogue.mark_discovered(dest_name, time_str)
 
-	if _icons.has(dest_name):
-		_icons[dest_name].visible = true
-
 	_revisit = false
 	_celebrate(dest_name, node, spot)
 
@@ -162,6 +159,8 @@ func _celebrate(dest_name: String, node: Node3D, spot: Vector3) -> void:
 		await _camera_focus.focus_on(node, _player.global_position, 2.0)
 		if _player.has_method("set_input_enabled"):
 			_player.call("set_input_enabled", true)
+	if _icons.has(dest_name):
+		_icons[dest_name].visible = true
 
 
 func _spawn_confetti(spot: Vector3) -> void:
