@@ -929,9 +929,10 @@ func _spawn_npcs(dialogue: DialogueManager, camera_focus: CameraFocusManager,
 			palette[k % palette.size()],
 			dialogue, camera_focus, player, goal, goals, goal_names, speech)
 	k += 1
-	# South outer sidewalk (patrols east-west at z = +outer_z)
+	# South outer sidewalk: patrol in the gap between the two center beach benches
+	# (benches at x=-20 and x=20 — NPC bypasses collision, so keep x in [-14, 14]).
 	_make_npc(Vector3(0, 0, outer_z),
-			PackedVector3Array([Vector3(-40, 0, outer_z), Vector3(40, 0, outer_z)]),
+			PackedVector3Array([Vector3(-14, 0, outer_z), Vector3(14, 0, outer_z)]),
 			palette[k % palette.size()],
 			dialogue, camera_focus, player, goal, goals, goal_names, speech)
 	k += 1
