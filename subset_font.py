@@ -21,8 +21,8 @@ CHARS = (
     "！、？。〜"
     # Digits and slash for the discovery counter (e.g. 3 / 7 か所発見)
     "0123456789/"
-    # NO Latin block — Godot falls back to its built-in font for ASCII,
-    # which keeps English labels looking normal (matching the rest of the UI).
+    # Full printable ASCII — dialogue labels show English too (NPC replies, etc.)
+    " !\"#$%&'()*+,-./:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"
 )
 
 unicodes = ",".join("U+{:04X}".format(ord(c)) for c in set(CHARS))
