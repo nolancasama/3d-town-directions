@@ -920,9 +920,12 @@ func _spawn_npcs(dialogue: DialogueManager, camera_focus: CameraFocusManager,
 	# One NPC on each outer boundary sidewalk.
 	var outer_z := 135.0 + SW_OFF   # south/north outer sidewalk z offset
 	var outer_x := 135.0 + SW_OFF   # east/west outer sidewalk x offset
-	# North outer sidewalk (patrols east-west at z = -outer_z)
-	_make_npc(Vector3(0, 0, -outer_z),
-			PackedVector3Array([Vector3(-40, 0, -outer_z), Vector3(40, 0, -outer_z)]),
+	# North: NPC on the train station platform (z=-143.5, y=0.85 = platform surface).
+	# The outer sidewalk at z=-140.6 sits inside the platform, so patrol there instead.
+	var plat_y := 0.85
+	var plat_z := -143.5
+	_make_npc(Vector3(0, plat_y, plat_z),
+			PackedVector3Array([Vector3(-8, plat_y, plat_z), Vector3(8, plat_y, plat_z)]),
 			palette[k % palette.size()],
 			dialogue, camera_focus, player, goal, goals, goal_names, speech)
 	k += 1
