@@ -2,21 +2,11 @@ class_name DialogueManager
 extends CanvasLayer
 # =============================================================================
 # DialogueManager.gd
-# -----------------------------------------------------------------------------
-# Owns the entire 2D UI:
-#   * A score label (top-left).
-#   * A big centered message label (used for "Correct!").
-#   * A dialogue panel (bottom) that can show either a line of NPC text or a
-#     list of selectable option buttons.
-#
-# show_options() is a coroutine: callers `await` it and receive the index of
-# the option the player clicked.
 # =============================================================================
 
 signal option_selected(index: int)
+signal text_submitted(text: String)   # fired when player submits text input
 
-var _score_label: Label
-var _timer_label: Label
 var _center_label: Label
 var _panel: PanelContainer
 var _speaker_label: Label
@@ -26,10 +16,24 @@ var _options_grid: GridContainer
 var _dir_panel: PanelContainer
 var _dir_title: Label
 var _dir_text: Label
+var _text_input: LineEdit
+
+# Discovery panel (top-left, replaces score)
+var _disc_panel: PanelContainer
+var _disc_count: Label
+var _disc_list: VBoxContainer
+var _disc_total: int = 0
+
+# Elapsed timer (top-centre while goal active, replaces time-bonus)
+var _elapsed_label: Label
+
+# Typewriter state
+var _tw_tween: Tween = null
+var _is_typing: bool = false
 
 var _tts_enabled: bool = false
 
-const PANEL_TOP_TEXT := -180.0
+const PANEL_TOP_TEXT    := -180.0
 const PANEL_TOP_OPTIONS := -360.0
 
 
@@ -40,25 +44,44 @@ func _ready() -> void:
 
 
 func _build_ui() -> void:
-	# --- Score (top-left) ----------------------------------------------------
-	_score_label = Label.new()
-	_score_label.position = Vector2(24, 18)
-	_score_label.add_theme_font_size_override("font_size", 30)
-	add_child(_score_label)
+	# --- Discovery panel (top-left) ------------------------------------------
+	_disc_panel = PanelContainer.new()
+	_disc_panel.position = Vector2(14, 14)
+	_disc_panel.custom_minimum_size = Vector2(220, 0)
+	add_child(_disc_panel)
 
-	# --- Time bonus countdown (top-centre, only while a goal is active) -------
-	_timer_label = Label.new()
-	_timer_label.anchor_left = 0.5
-	_timer_label.anchor_right = 0.5
-	_timer_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	_timer_label.offset_top = 16
-	_timer_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_timer_label.add_theme_font_size_override("font_size", 30)
-	_timer_label.add_theme_color_override("font_color", Color(1, 0.9, 0.3))
-	_timer_label.visible = false
-	add_child(_timer_label)
+	var dm := MarginContainer.new()
+	for s in ["margin_left", "margin_right", "margin_top", "margin_bottom"]:
+		dm.add_theme_constant_override(s, 10)
+	_disc_panel.add_child(dm)
 
-	# --- Centered message (e.g. "Correct!") ----------------------------------
+	var dv := VBoxContainer.new()
+	dv.add_theme_constant_override("separation", 4)
+	dm.add_child(dv)
+
+	_disc_count = Label.new()
+	_disc_count.add_theme_font_size_override("font_size", 22)
+	_disc_count.add_theme_color_override("font_color", Color(1.0, 0.90, 0.4))
+	_disc_count.text = "0 / 0 Found"
+	dv.add_child(_disc_count)
+
+	_disc_list = VBoxContainer.new()
+	_disc_list.add_theme_constant_override("separation", 2)
+	dv.add_child(_disc_list)
+
+	# --- Elapsed timer (top-centre) ------------------------------------------
+	_elapsed_label = Label.new()
+	_elapsed_label.anchor_left = 0.5
+	_elapsed_label.anchor_right = 0.5
+	_elapsed_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_elapsed_label.offset_top = 16
+	_elapsed_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_elapsed_label.add_theme_font_size_override("font_size", 30)
+	_elapsed_label.add_theme_color_override("font_color", Color(1, 0.9, 0.3))
+	_elapsed_label.visible = false
+	add_child(_elapsed_label)
+
+	# --- Centered message (e.g. "You found the X!") --------------------------
 	_center_label = Label.new()
 	_center_label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_center_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -68,7 +91,7 @@ func _build_ui() -> void:
 	_center_label.visible = false
 	add_child(_center_label)
 
-	# --- Persistent turn-by-turn directions (bottom-center) ------------------
+	# --- Persistent directions (bottom-centre) --------------------------------
 	_dir_panel = PanelContainer.new()
 	_dir_panel.anchor_left = 0.5
 	_dir_panel.anchor_top = 1.0
@@ -129,8 +152,6 @@ func _build_ui() -> void:
 	_text_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	vbox.add_child(_text_label)
 
-	# Options live in a scrollable multi-column grid so a long destination list
-	# (the player can ask about ~20 places) fits and scrolls with the wheel.
 	_options_scroll = ScrollContainer.new()
 	_options_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_options_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -143,15 +164,93 @@ func _build_ui() -> void:
 	_options_grid.add_theme_constant_override("v_separation", 6)
 	_options_scroll.add_child(_options_grid)
 
+	# --- Text input (keyboard pipeline, appears when talking to NPC) ---------
+	_text_input = LineEdit.new()
+	_text_input.placeholder_text = "Type your question here, then press Enter..."
+	_text_input.anchor_left = 0.05
+	_text_input.anchor_right = 0.95
+	_text_input.anchor_top = 1.0
+	_text_input.anchor_bottom = 1.0
+	_text_input.offset_top = -240
+	_text_input.offset_bottom = -205
+	_text_input.add_theme_font_size_override("font_size", 22)
+	_text_input.visible = false
+	add_child(_text_input)
+	_text_input.text_submitted.connect(_on_text_input_submitted)
+
+
+func _on_text_input_submitted(txt: String) -> void:
+	var trimmed := txt.strip_edges()
+	if trimmed == "":
+		return
+	_text_input.text = ""
+	text_submitted.emit(trimmed)
+
+
+# -----------------------------------------------------------------------------
+# Discovery panel
+# -----------------------------------------------------------------------------
+func init_discovery(total: int) -> void:
+	_disc_total = total
+	_disc_count.text = "0 / %d Found" % total
+
+
+func mark_discovered(name: String, time_str: String) -> void:
+	var found := _disc_list.get_child_count() + 1
+	_disc_count.text = "%d / %d Found" % [found, _disc_total]
+	var lbl := Label.new()
+	lbl.add_theme_font_size_override("font_size", 17)
+	lbl.add_theme_color_override("font_color", Color(0.85, 1.0, 0.85))
+	lbl.text = "✓ %s  %s" % [name, time_str]
+	_disc_list.add_child(lbl)
+
 
 # -----------------------------------------------------------------------------
 # Public API
 # -----------------------------------------------------------------------------
 
-# Show a question with clickable options. Awaitable: returns the chosen index.
+# Show NPC text as a typewriter sequence.
+func show_text(speaker: String, text: String) -> void:
+	_speaker_label.text = speaker
+	_text_label.text = text
+	_text_label.visible_characters = 0
+	_clear_options()
+	_options_scroll.visible = false
+	_panel.offset_top = PANEL_TOP_TEXT
+	_panel.visible = true
+	_start_typewriter(text.length())
+
+
+func _start_typewriter(length: int) -> void:
+	if _tw_tween != null:
+		_tw_tween.kill()
+	_is_typing = true
+	_tw_tween = create_tween()
+	_tw_tween.tween_method(
+		func(v: int) -> void: _text_label.visible_characters = v,
+		0, length, maxf(0.3, length / 28.0)
+	)
+	_tw_tween.finished.connect(func() -> void: _is_typing = false)
+
+
+func is_typing() -> bool:
+	return _is_typing
+
+
+func skip_typewriter() -> void:
+	if _tw_tween != null:
+		_tw_tween.kill()
+		_tw_tween = null
+	_text_label.visible_characters = -1
+	_is_typing = false
+
+
+# Show text+buttons for a choice. Returns selected index.
 func show_options(speaker: String, prompt: String, options: Array) -> int:
 	_speaker_label.text = speaker
 	_text_label.text = prompt
+	_text_label.visible_characters = -1
+	_is_typing = false
 	_clear_options()
 
 	var first: Button = null
@@ -168,8 +267,6 @@ func show_options(speaker: String, prompt: String, options: Array) -> int:
 	_panel.offset_top = PANEL_TOP_OPTIONS
 	_options_scroll.visible = true
 	_panel.visible = true
-	# Keyboard-only navigation: focus the first option so the arrow keys move
-	# between buttons and Enter/Space (ui_accept) selects. No mouse needed.
 	if first != null:
 		first.grab_focus()
 	var index: int = await option_selected
@@ -181,7 +278,17 @@ func _on_option_pressed(index: int) -> void:
 	option_selected.emit(index)
 
 
-# Persistent bottom-right directions panel (updated every frame by GoalManager).
+func show_text_input() -> void:
+	_text_input.text = ""
+	_text_input.visible = true
+	_text_input.grab_focus()
+
+
+func hide_text_input() -> void:
+	_text_input.visible = false
+	_text_input.text = ""
+
+
 func set_directions(dest_name: String, instruction: String) -> void:
 	_dir_title.text = "→ " + dest_name
 	_dir_text.text = instruction
@@ -190,36 +297,21 @@ func set_directions(dest_name: String, instruction: String) -> void:
 
 func clear_directions() -> void:
 	_dir_panel.visible = false
+	_elapsed_label.visible = false
 
 
-# Time-bonus countdown shown while a goal is active. Turns red when it runs out.
-func set_timer(seconds: float) -> void:
-	_timer_label.text = "Time bonus: %.1f" % seconds
-	_timer_label.add_theme_color_override("font_color",
-			Color(1, 0.9, 0.3) if seconds > 0.0 else Color(0.95, 0.4, 0.35))
-	_timer_label.visible = true
-
-
-func clear_timer() -> void:
-	_timer_label.visible = false
-
-
-# Show a plain line of dialogue (no buttons).
-func show_text(speaker: String, text: String) -> void:
-	_speaker_label.text = speaker
-	_text_label.text = text
-	_clear_options()
-	_options_scroll.visible = false
-	_panel.offset_top = PANEL_TOP_TEXT
-	_panel.visible = true
+func update_elapsed(seconds: float) -> void:
+	var s := int(seconds)
+	_elapsed_label.text = "%d:%02d" % [s / 60, s % 60]
+	_elapsed_label.visible = true
 
 
 func hide_dialogue() -> void:
 	_panel.visible = false
 	_clear_options()
+	skip_typewriter()
 
 
-# Briefly flash a big centered message, then fade it out.
 func show_center_message(text: String) -> void:
 	_center_label.text = text
 	_center_label.modulate.a = 1.0
@@ -231,17 +323,13 @@ func show_center_message(text: String) -> void:
 	_center_label.visible = false
 
 
-func set_score(value: int) -> void:
-	_score_label.text = "Score: %d" % value
-
-
 func _clear_options() -> void:
 	for child in _options_grid.get_children():
 		child.queue_free()
 
 
 # -----------------------------------------------------------------------------
-# TTS (Web Speech API, local voices only — works offline / spotty WiFi)
+# TTS (Web Speech API, local voices only)
 # -----------------------------------------------------------------------------
 func _setup_tts() -> void:
 	JavaScriptBridge.eval("""

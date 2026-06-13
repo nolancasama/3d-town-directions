@@ -47,6 +47,7 @@ var _state: int = State.IDLE
 var _player_in_range: bool = false
 var _conversing: bool = false   # true only once the player actually starts talking
 var _walk_i: int = 0
+var _greeted: bool = false      # true after first greeting reply this conversation
 
 var _face_start: Basis
 var _face_end: Basis
@@ -73,6 +74,7 @@ func setup(dialogue: DialogueManager, camera_focus: CameraFocusManager,
 	_goal_names = goal_names
 	_speech = speech
 	_speech.heard.connect(_on_heard)
+	_dialogue.text_submitted.connect(_on_text_submitted)
 
 
 # -----------------------------------------------------------------------------
@@ -154,11 +156,9 @@ func _process(delta: float) -> void:
 			_hum.visible = true
 
 	_update_walk(delta)
-	if engaged and not _cinematic and Input.is_action_just_pressed("interact"):
-		if _state == State.GREET:
+	if engaged and not _cinematic and _state == State.GREET:
+		if Input.is_action_just_pressed("interact") or Input.is_action_just_pressed("ui_accept"):
 			_greet()
-		elif _state == State.ASK:
-			_ask_via_menu()
 
 
 # Keep patrolling even when the player is just nearby; only stand still once an
@@ -190,11 +190,13 @@ func _begin_greet() -> void:
 
 func _greet() -> void:
 	_state = State.ASK
-	_conversing = true      # now stop walking and engage
+	_conversing = true
+	_greeted = false
 	_dialogue.speak("Yes?")
 	_dialogue.show_text("Townsperson", "Yes?")
-	_face_target(_player)   # turn to face the player once they say "Excuse me"
+	_face_target(_player)
 	_speech.listen()
+	_dialogue.show_text_input()
 
 
 func _on_heard(text: String) -> void:
@@ -203,11 +205,20 @@ func _on_heard(text: String) -> void:
 	var t := _clean(text)
 	if _state == State.GREET and (t.contains("excuse me") or t.contains("pardon me") or t.contains("hello") or t.contains("good morning")):
 		_greet()
-	elif _state == State.ASK and (t.contains("hello") or t.contains("good morning")):
-		var replies := ["Hello!", "Hi there!", "Good morning!", "Hey!"]
-		var r: String = replies[randi() % replies.size()]
+	elif _state == State.ASK and (t.contains("bye") or t.contains("goodbye") or t.contains("see you") or t.contains("thank you")):
+		var farewells := ["See you!", "Take care!", "Goodbye!", "Anytime, good luck!"]
+		var r: String = farewells[randi() % farewells.size()]
 		_dialogue.speak(r)
 		_dialogue.show_text("Townsperson", r)
+		_dialogue.hide_text_input()
+		_reset()
+	elif _state == State.ASK and (t.contains("hello") or t.contains("good morning")):
+		if not _greeted:
+			_greeted = true
+			var replies := ["Hello!", "Hi there!", "Good morning!", "Hey!"]
+			var r: String = replies[randi() % replies.size()]
+			_dialogue.speak(r)
+			_dialogue.show_text("Townsperson", r)
 		_speech.listen()
 	elif _state == State.ASK and t.contains("how are you"):
 		var replies := ["I'm fine!", "I'm good!", "I'm great, thanks!"]
@@ -227,21 +238,26 @@ func _on_heard(text: String) -> void:
 		_speech.listen()   # didn't catch it — keep the mic open
 
 
-func _ask_via_menu() -> void:
-	_state = State.IDLE
-	_speech.stop()
-	_player.set_input_enabled(false)
-	_dialogue.speak("Where would you like to go?")
-	var idx: int = await _dialogue.show_options(
-			"Townsperson", "Where would you like to go?", _goal_names)
-	_player.set_input_enabled(true)
-	_deliver(_goal_names[idx])
+# Text input submitted from the keyboard pipeline — route through same logic as STT.
+func _on_text_submitted(text: String) -> void:
+	if _active != self or _cinematic or _state != State.ASK:
+		return
+	_on_heard(text)
+
+
+func _deliver_directions_only(dest_name: String) -> void:
+	# Re-navigate to an already-discovered building via text (no reward, no ring).
+	_dialogue.hide_text_input()
+	_dialogue.speak("It's over there!")
+	_dialogue.show_text("Townsperson", "It's over there!")
+	_goal_manager.set_target(dest_name, _goals[dest_name])
 
 
 func _deliver(dest_name: String) -> void:
 	_state = State.IDLE
 	_speech.stop()
 	_hint.visible = false
+	_dialogue.hide_text_input()
 	_player.set_input_enabled(false)
 	var target: Node3D = _goals[dest_name]
 
@@ -270,11 +286,13 @@ func _deliver(dest_name: String) -> void:
 func _reset() -> void:
 	_state = State.IDLE
 	_conversing = false
+	_greeted = false
 	_hint.visible = false
 	if _active == self:
 		_active = null
 		_speech.stop()
 		_dialogue.hide_dialogue()
+		_dialogue.hide_text_input()
 
 
 # -----------------------------------------------------------------------------

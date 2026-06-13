@@ -58,19 +58,19 @@ const GOAL_DEFS := {
 	"School": {"style": "brick", "size": Vector3(18, 8, 14), "color": Color(0.68, 0.27, 0.22)},
 	"Swimming Pool": {"style": "pool", "size": Vector3(20, 3, 16), "color": Color(0.80, 0.80, 0.82), "accent": Color(0.25, 0.55, 0.85)},
 	"Church": {"style": "church", "size": Vector3(14, 9, 16), "color": Color(0.95, 0.95, 0.93)},
-	"Shrine": {"style": "shrine", "size": Vector3(12, 6, 12), "color": Color(0.78, 0.22, 0.12), "accent": Color(0.45, 0.30, 0.18)},
+	"Chapel": {"style": "church", "size": Vector3(12, 9, 14), "color": Color(0.93, 0.92, 0.88)},
 	"Train Station": {"style": "station", "size": Vector3(20, 7, 12), "color": Color(0.72, 0.58, 0.45), "accent": Color(0.25, 0.40, 0.30)},
-	"Motel": {"style": "motel", "size": Vector3(18, 5, 12), "color": Color(0.85, 0.78, 0.62), "accent": Color(0.55, 0.30, 0.20)},
+	"Nolan's House": {"style": "house", "size": Vector3(10, 4, 9), "color": Color(0.78, 0.72, 0.62), "accent": Color(0.38, 0.25, 0.18)},
 }
 
 # One goal per block across the 5x5 grid (rows north->south, cols west->east).
 # The central block is the Park (town green).
 const GOAL_GRID := [
-	["Train Station", "School", "Convenience Store", "Diner", "Motel"],
+	["Train Station", "School", "Convenience Store", "Diner", "Nolan's House"],
 	["Hospital", "Library", "Bakery", "Bank", "Police Station"],
 	["Drugstore", "Museum", "Park", "Post Office", "Fire Station"],
 	["Church", "Starbucks", "McDonald's", "City Hall", "Town Office"],
-	["Shrine", "Swimming Pool", "Supermarket", "Bookstore", "Gas Station"],
+	["Chapel", "Swimming Pool", "Supermarket", "Bookstore", "Gas Station"],
 ]
 
 const BLOCK_CENTERS := [-108.0, -54.0, 0.0, 54.0, 108.0]   # world block centres
@@ -116,6 +116,9 @@ var _greeter_npc: NPCInteraction
 var _bgm_player: AudioStreamPlayer
 var _bus_ref: Node3D
 var _bus_origin_x: float
+var _icon_nodes: Dictionary = {}   # building name -> Node3D (hidden until discovered)
+var _icons_root: Node3D
+var _cine_skip: bool = false
 
 
 func _ready() -> void:
@@ -129,6 +132,9 @@ func _ready() -> void:
 	_props = StaticBody3D.new()
 	_props.name = "Props"
 	add_child(_props)
+	_icons_root = Node3D.new()
+	_icons_root.name = "Icons"
+	add_child(_icons_root)
 	_build_roads()
 	var goals: Dictionary = {}
 	var goal_names: Array = []
@@ -162,8 +168,8 @@ func _ready() -> void:
 	add_child(speech)
 
 	camera_focus.setup(player.camera)
-	goal.setup(player, _dialogue, camera_focus)
-	_dialogue.set_score(0)
+	goal.setup(player, _dialogue, camera_focus, _icon_nodes)
+	_dialogue.init_discovery(goal_names.size())
 
 	_spawn_npcs(_dialogue, camera_focus, player, goal, goals, goal_names, speech)
 	_play_intro(player)
@@ -209,23 +215,23 @@ func _play_intro(player: PlayerController) -> void:
 	_bgm_player.volume_db = -10.0
 	_bgm_player.play()
 
-	# 1) High-angle orbit — continuous half-turn over 11 s (runs in background).
+	# 1) High-angle orbit — continuous half-turn over 11 s.
 	_intro_orbit(focus, 14.0, 26.0, -PI * 0.5, PI * 0.5, 11.0)
 	# At the midpoint the player steps off the bus and walks to their start position.
-	await get_tree().create_timer(5.5).timeout
+	await _cine_wait(5.5)
 	player.global_position = Vector3(bus.position.x + 2.5, 0.0, bus.position.z - 1.5)
 	player.rotation.y = 0.0
 	player.visible = true
 	var wt := create_tween()
 	wt.set_trans(Tween.TRANS_LINEAR)
 	wt.tween_property(player, "global_position", player_start, 5.0)
-	await get_tree().create_timer(5.5).timeout
+	await _cine_wait(5.5)
 	player.rotation.y = PI  # face south — toward the camera for his introduction
 
 	# 2) Hard cut to side bus shot.
 	_intro_cam.position = Vector3(0, 2.0, 32)
 	_intro_cam.look_at(Vector3(0, 1.5, 23.75), Vector3.UP)
-	await get_tree().create_timer(0.6).timeout
+	await _cine_wait(0.6)
 
 	# 3) Engine starts, bus rumbles for 1 s, then drives off camera-left.
 	_bus_ref = bus
@@ -238,31 +244,34 @@ func _play_intro(player: PlayerController) -> void:
 
 	var rt := create_tween()
 	rt.tween_method(_apply_bus_rumble, 0.0, 0.5, 0.5)
-	await rt.finished
+	while rt.is_running():
+		await get_tree().process_frame
+		if _cine_skip:
+			_cine_skip = false; rt.kill()
+			break
 	bus.position = Vector3(_bus_origin_x, 0.0, bus.position.z)
 
 	var bt := create_tween()
 	bt.set_ease(Tween.EASE_IN)
 	bt.set_trans(Tween.TRANS_SINE)
 	bt.tween_property(bus, "position:x", -55.0, 4.5)
-	# Engine pitch rises as the bus accelerates away.
 	var rv := create_tween()
 	rv.tween_property(engine, "pitch_scale", 2.2, 4.0)
-	await bt.finished
+	while bt.is_running():
+		await get_tree().process_frame
+		if _cine_skip:
+			_cine_skip = false; bt.kill(); rv.kill(); break
 
-	var ef := create_tween()
-	ef.tween_property(engine, "volume_db", -60.0, 0.8)
-	await ef.finished
 	engine.queue_free()
 	bus.queue_free()
 
-	# 4) Slow push-in to the player's face (5 s) — Matsubara introduces himself.
+	# 4) Push-in to the player's face — Matsubara introduces himself.
 	var face_pos := Vector3(0, 2.5, 24)
 	_dialogue.show_text("Matsubara kun", "Hi! I'm Matsubara kun! This is my first time in America.")
-	await _intro_move(Vector3(0, 2.0, 32), face_pos, focus, focus, 5.0)
-	await get_tree().create_timer(5.0).timeout
+	await _intro_move(Vector3(0, 2.0, 32), face_pos, Vector3(0, 1.5, 23.75), focus, 5.0)
+	await _cine_wait(5.0)
 
-	# 5) Town pan shots — keep Matsubara south so he still faces camera when it returns in step 6.
+	# 5) Town pan shots.
 	player.rotation.y = PI
 	_dialogue.show_text("Matsubara kun", "Wow! America is so big!")
 	await _intro_move(Vector3(0, 4, -12), Vector3(0, 4, -12),
@@ -270,27 +279,26 @@ func _play_intro(player: PlayerController) -> void:
 	await _intro_move(Vector3(12, 4, 0), Vector3(12, 4, 0),
 			Vector3(54, 5, -35), Vector3(54, 5, 35), 3.8)
 
-	# 6) Smooth move to a tight close-up of Matsubara kun's face.
+	# 6) Close-up of Matsubara's face, then ask for help after a short delay.
 	var close_pos := Vector3(0, 1.7, 19.5)
 	var close_look := player.global_position + Vector3(0, 0.8, 0)
-	await _intro_move(Vector3(12, 4, 0), close_pos,
-			Vector3(54, 5, 35), close_look, 2.0)
+	await _intro_move(Vector3(12, 4, 0), close_pos, Vector3(54, 5, 35), close_look, 2.0)
 
-	# Matsubara asks for help — buttons appear alongside the question.
+	_dialogue.show_text("Matsubara kun", "I don't know where anything is! Will you help me?")
+	await _cine_wait(3.0)   # buttons appear after 3 s OR immediately on skip
+
 	var idx: int = await _dialogue.show_options("Matsubara kun",
 			"I don't know where anything is! Will you help me?",
 			["Help him", "Don't help him"])
 
 	if idx != 0:
-		# "Don't help him" — show "Please?" then give one more chance.
 		_dialogue.show_text("Matsubara kun", "Please?")
-		await get_tree().create_timer(2.0).timeout
+		await _cine_wait(2.0)
 		idx = await _dialogue.show_options(
 				"Matsubara kun", "Please?", ["Help him", "Don't help him"])
 		if idx != 0:
-			# Refused twice — Matsubara says goodbye and the game ends.
 			_dialogue.show_text("Matsubara kun", "Oh that's too bad. Bye.")
-			await get_tree().create_timer(3.0).timeout
+			await _cine_wait(3.0)
 			_dialogue.hide_dialogue()
 			_fade_out_intro_title()
 			NPCInteraction._cinematic = false
@@ -300,20 +308,18 @@ func _play_intro(player: PlayerController) -> void:
 			get_tree().quit()
 			return
 
-	# Player agreed (first try or after "Please?").
-	# 7) Matsubara thanks the player and hints at what to do next.
+	# 7) Matsubara thanks the player.
 	_dialogue.show_text("Matsubara kun", "Thank you! Maybe I should ask somebody for directions.")
-	await get_tree().create_timer(3.5).timeout
+	await _cine_wait(3.5)
 	_dialogue.hide_dialogue()
 
-	# 8) Greeter NPC re-appears and resumes patrolling; camera pans to reveal them.
+	# 8) Greeter NPC re-appears; camera pans to reveal them.
 	if _greeter_npc != null:
 		_greeter_npc.visible = true
-	# Keep facing south — the tween at handoff will rotate him north.
 	player.rotation.y = PI
 	await _intro_move(close_pos, Vector3(12, 3, 26),
 			close_look, Vector3(5, 1.5, 18), 2.5)
-	await get_tree().create_timer(2.0).timeout
+	await _cine_wait(2.0)
 
 	# Unblock NPCs and hand control back to the player.
 	NPCInteraction._cinematic = false
@@ -465,6 +471,31 @@ func _make_traffic_whoosh() -> AudioStreamWAV:
 
 # Orbit the intro camera around `center` at the given radius/height, sweeping the
 # angle a0 -> a1 while always looking at the centre.
+# Skip the current cinematic wait when the player presses Space/Enter.
+# First press during typewriter: complete the text. Second (or non-typewriter): skip wait.
+func _input(event: InputEvent) -> void:
+	if not (event is InputEventKey and event.pressed and not event.echo):
+		return
+	if event.keycode not in [KEY_SPACE, KEY_ENTER, KEY_KP_ENTER]:
+		return
+	if not NPCInteraction._cinematic:
+		return
+	if _dialogue != null and _dialogue.is_typing():
+		_dialogue.skip_typewriter()
+	else:
+		_cine_skip = true
+
+
+func _cine_wait(seconds: float) -> void:
+	var elapsed := 0.0
+	while elapsed < seconds:
+		await get_tree().process_frame
+		if _cine_skip:
+			_cine_skip = false
+			return
+		elapsed += get_process_delta_time()
+
+
 func _intro_orbit(center: Vector3, radius: float, height: float,
 		a0: float, a1: float, dur: float) -> void:
 	_io_center = center
@@ -475,7 +506,13 @@ func _intro_orbit(center: Vector3, radius: float, height: float,
 	t.set_trans(Tween.TRANS_SINE)
 	t.set_ease(Tween.EASE_IN_OUT)
 	t.tween_method(_apply_intro_orbit, a0, a1, dur)
-	await t.finished
+	while t.is_running():
+		await get_tree().process_frame
+		if _cine_skip:
+			_cine_skip = false
+			t.kill()
+			_apply_intro_orbit(a1)
+			return
 
 
 func _apply_intro_orbit(a: float) -> void:
@@ -496,7 +533,13 @@ func _intro_move(p0: Vector3, p1: Vector3, l0: Vector3, l1: Vector3, dur: float)
 	t.set_trans(Tween.TRANS_SINE)
 	t.set_ease(Tween.EASE_IN_OUT)
 	t.tween_method(_apply_intro_move, 0.0, 1.0, dur)
-	await t.finished
+	while t.is_running():
+		await get_tree().process_frame
+		if _cine_skip:
+			_cine_skip = false
+			t.kill()
+			_apply_intro_move(1.0)
+			return
 
 
 func _apply_intro_move(f: float) -> void:
@@ -1203,9 +1246,14 @@ func _build_town(layout: Array, goals: Dictionary, goal_names: Array) -> void:
 			# Where the building's name label floats once it's been found: a sign
 			# just above the door, on the front face.
 			node.set_meta("label_pos", node.global_position
-					+ Vector3(0, 4.6, 0) + fwd * (size.z * 0.5 + 0.4))
+					+ Vector3(0, size.y + 5.0, 0))
 			goals[cfg.name] = node
 			goal_names.append(cfg.name)
+			# Buildings with facade icons (cross, burger) — added as hidden nodes
+			# under _icons_root so they're excluded from baking and can be revealed
+			# individually when the player discovers that building.
+			if cfg.name in ["Hospital", "McDonald's"]:
+				_add_icon_for_building(cfg.name, size, node)
 
 
 # Pack each block with buildings to create a dense "city maze": the goal sits at
@@ -1482,8 +1530,6 @@ func _spawn_building(cfg: Dictionary) -> Node3D:
 			_build_pool(body, size, color, accent)
 		"station":
 			_build_station(body, size, color, accent)
-		"shrine":
-			_build_shrine(body, size, color, accent)
 		"gas":
 			_build_gas(body, size)
 		_:
@@ -1510,8 +1556,7 @@ func _build_structure(body: Node3D, cfg: Dictionary, size: Vector3, color: Color
 			rows = 2
 		"hospital":
 			_flat_roof(body, size, Color(0.72, 0.74, 0.77))
-			_cross(body, size)
-			rows = 3
+			rows = 3   # red cross added as a hidden icon node, revealed on discovery
 		"brick":
 			_flat_roof(body, size, Color(0.30, 0.16, 0.13))
 			_flagpole(body, size)
@@ -1530,8 +1575,7 @@ func _build_structure(body: Node3D, cfg: Dictionary, size: Vector3, color: Color
 			rows = 0   # storefront replaces the window grid on the ground floor
 			if style == "market":
 				rows = 1   # a strip of clerestory windows above the storefront
-			if cfg.name == "McDonald's":
-				_burger(body, size)
+			# burger added as hidden icon node, revealed on discovery
 		"office":
 			_flat_roof(body, size, color.darkened(0.2))
 			rows = 4
@@ -1547,6 +1591,7 @@ func _build_structure(body: Node3D, cfg: Dictionary, size: Vector3, color: Color
 		"church":
 			_pitched_roof(body, size, Color(0.45, 0.30, 0.35))
 			_steeple(body, size)
+			_steeple_cross(body, size)
 			rows = 2
 			cols = 2
 		"motel":
@@ -1694,6 +1739,27 @@ func _steeple(body: Node3D, size: Vector3) -> void:
 	_prism(body, Vector3(3.2, 4.0, 3.2), Vector3(x, size.y + 6.0, z), Color(0.45, 0.30, 0.35))
 
 
+func _steeple_cross(body: Node3D, size: Vector3) -> void:
+	var z := -size.z * 0.5 + 1.5 + 1.52   # front face of steeple tower
+	var y := size.y + 5.2
+	var white := Color(0.98, 0.98, 0.96)
+	_box(body, Vector3(0.28, 1.8, 0.14), Vector3(0, y, z), white)
+	_box(body, Vector3(1.1, 0.28, 0.14), Vector3(0, y + 0.35, z), white)
+
+
+func _add_icon_for_building(bname: String, size: Vector3, body: Node3D) -> void:
+	var icon := Node3D.new()
+	_icons_root.add_child(icon)
+	icon.global_transform = body.global_transform
+	match bname:
+		"Hospital":
+			_cross(icon, size)
+		"McDonald's":
+			_burger(icon, size)
+	icon.visible = false
+	_icon_nodes[bname] = icon
+
+
 func _motel_doors(body: Node3D, size: Vector3) -> void:
 	var z := size.z * 0.5
 	var n := 4
@@ -1742,27 +1808,6 @@ func _build_station(body: Node3D, size: Vector3, color: Color, roof: Color) -> v
 	_door(body, size)
 
 
-func _build_shrine(body: Node3D, size: Vector3, vermilion: Color, wood: Color) -> void:
-	var stone := Color(0.72, 0.72, 0.70)
-	# Stepped stone base.
-	_box(body, Vector3(size.x, 0.6, size.z), Vector3(0, 0.3, 0), stone)
-	_box(body, Vector3(size.x - 2, 0.6, size.z - 2), Vector3(0, 0.9, 0), stone.lightened(0.05))
-	# Shrine hall: wooden body with a big overhanging vermilion roof.
-	_box(body, Vector3(size.x - 4, 3.2, size.z - 5), Vector3(0, 2.8, -0.5), wood)
-	_prism(body, Vector3(size.x - 1, 2.8, size.z - 3), Vector3(0, 5.8, -0.5), vermilion)
-	# Torii gate at the front.
-	var z := size.z * 0.5 + 1.0
-	for sx in [-1.0, 1.0]:
-		_cylinder(body, 0.3, 5.5, Vector3(sx * (size.x * 0.5 - 1.0), 2.75, z), vermilion)
-		var tcol := CollisionShape3D.new()
-		var tshape := CylinderShape3D.new()
-		tshape.radius = 0.3
-		tshape.height = 5.5
-		tcol.shape = tshape
-		tcol.position = Vector3(sx * (size.x * 0.5 - 1.0), 2.75, z)
-		body.add_child(tcol)
-	_box(body, Vector3(size.x + 1.0, 0.6, 0.6), Vector3(0, 5.4, z), vermilion)
-	_box(body, Vector3(size.x - 1.0, 0.4, 0.4), Vector3(0, 4.6, z), vermilion)
 
 
 func _build_gas(body: Node3D, size: Vector3) -> void:
