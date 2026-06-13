@@ -2260,6 +2260,17 @@ func _collide_gas(body: Node3D, size: Vector3) -> void:
 		pc.shape = pb
 		pc.position = Vector3(sx * 2.5, ps.y * 0.5, size.z * 0.2)
 		body.add_child(pc)
+	# Canopy posts — four cylinders, matching _build_gas positions exactly.
+	var canopy_h := 6.3
+	for sx2 in [-1.0, 1.0]:
+		for sz2 in [-1.0, 1.0]:
+			var cc := CollisionShape3D.new()
+			var cs := CylinderShape3D.new()
+			cs.radius = 0.2
+			cs.height = canopy_h
+			cc.shape = cs
+			cc.position = Vector3(sx2 * (size.x * 0.5 - 1.0), canopy_h * 0.5, sz2 * (size.z * 0.5 - 1.0))
+			body.add_child(cc)
 
 
 func _box(parent: Node3D, size: Vector3, pos: Vector3, color: Color) -> MeshInstance3D:
