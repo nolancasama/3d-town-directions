@@ -18,13 +18,13 @@ var _dir_title: Label
 var _dir_text: Label
 var _text_input: LineEdit
 
-# Discovery panel (top-left, replaces score)
+# Discovery panel (top-left)
 var _disc_panel: PanelContainer
 var _disc_count: Label
 var _disc_list: VBoxContainer
 var _disc_total: int = 0
 
-# Elapsed timer (top-centre while goal active, replaces time-bonus)
+# Elapsed timer (top-centre while goal active)
 var _elapsed_label: Label
 
 # Typewriter state
@@ -33,8 +33,7 @@ var _is_typing: bool = false
 
 var _tts_enabled: bool = false
 
-const PANEL_TOP_TEXT    := -180.0
-const PANEL_TOP_OPTIONS := -360.0
+const PANEL_H := -245.0
 
 
 func _ready() -> void:
@@ -62,12 +61,19 @@ func _build_ui() -> void:
 	_disc_count = Label.new()
 	_disc_count.add_theme_font_size_override("font_size", 22)
 	_disc_count.add_theme_color_override("font_color", Color(1.0, 0.90, 0.4))
-	_disc_count.text = "0 / 0 Found"
+	_disc_count.text = "0 / 0 Places Found"
 	dv.add_child(_disc_count)
+
+	# Scroll container caps the list at ~7 visible rows; extra entries scroll.
+	var disc_scroll := ScrollContainer.new()
+	disc_scroll.custom_minimum_size = Vector2(200, 154)
+	disc_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	dv.add_child(disc_scroll)
 
 	_disc_list = VBoxContainer.new()
 	_disc_list.add_theme_constant_override("separation", 2)
-	dv.add_child(_disc_list)
+	_disc_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	disc_scroll.add_child(_disc_list)
 
 	# --- Elapsed timer (top-centre) ------------------------------------------
 	_elapsed_label = Label.new()
@@ -112,12 +118,13 @@ func _build_ui() -> void:
 	_dir_title = Label.new()
 	_dir_title.add_theme_font_size_override("font_size", 20)
 	_dir_title.add_theme_color_override("font_color", Color(1, 0.85, 0.4))
-	_dir_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_dir_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	_dir_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	dvbox.add_child(_dir_title)
 	_dir_text = Label.new()
 	_dir_text.add_theme_font_size_override("font_size", 24)
 	_dir_text.custom_minimum_size = Vector2(360, 0)
-	_dir_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_dir_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	_dir_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	dvbox.add_child(_dir_text)
 
@@ -126,7 +133,7 @@ func _build_ui() -> void:
 	_panel.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
 	_panel.offset_left = 40
 	_panel.offset_right = -40
-	_panel.offset_top = PANEL_TOP_TEXT
+	_panel.offset_top = PANEL_H
 	_panel.offset_bottom = -40
 	_panel.visible = false
 	add_child(_panel)
@@ -153,7 +160,7 @@ func _build_ui() -> void:
 	vbox.add_child(_text_label)
 
 	_options_scroll = ScrollContainer.new()
-	_options_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_options_scroll.custom_minimum_size = Vector2(0, 65)
 	_options_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	vbox.add_child(_options_scroll)
 
@@ -164,18 +171,13 @@ func _build_ui() -> void:
 	_options_grid.add_theme_constant_override("v_separation", 6)
 	_options_scroll.add_child(_options_grid)
 
-	# --- Text input (keyboard pipeline, appears when talking to NPC) ---------
+	# --- Text input (keyboard pipeline, inside the dialogue panel) -----------
 	_text_input = LineEdit.new()
 	_text_input.placeholder_text = "Type your question here, then press Enter..."
-	_text_input.anchor_left = 0.05
-	_text_input.anchor_right = 0.95
-	_text_input.anchor_top = 1.0
-	_text_input.anchor_bottom = 1.0
-	_text_input.offset_top = -240
-	_text_input.offset_bottom = -205
+	_text_input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_text_input.add_theme_font_size_override("font_size", 22)
 	_text_input.visible = false
-	add_child(_text_input)
+	vbox.add_child(_text_input)
 	_text_input.text_submitted.connect(_on_text_input_submitted)
 
 
@@ -192,12 +194,17 @@ func _on_text_input_submitted(txt: String) -> void:
 # -----------------------------------------------------------------------------
 func init_discovery(total: int) -> void:
 	_disc_total = total
-	_disc_count.text = "0 / %d Found" % total
+	_disc_count.text = "0 / %d Places Found" % total
+	_disc_panel.visible = false
+
+
+func show_discovery_panel() -> void:
+	_disc_panel.visible = true
 
 
 func mark_discovered(name: String, time_str: String) -> void:
 	var found := _disc_list.get_child_count() + 1
-	_disc_count.text = "%d / %d Found" % [found, _disc_total]
+	_disc_count.text = "%d / %d Places Found" % [found, _disc_total]
 	var lbl := Label.new()
 	lbl.add_theme_font_size_override("font_size", 17)
 	lbl.add_theme_color_override("font_color", Color(0.85, 1.0, 0.85))
@@ -209,14 +216,12 @@ func mark_discovered(name: String, time_str: String) -> void:
 # Public API
 # -----------------------------------------------------------------------------
 
-# Show NPC text as a typewriter sequence.
 func show_text(speaker: String, text: String) -> void:
 	_speaker_label.text = speaker
 	_text_label.text = text
 	_text_label.visible_characters = 0
 	_clear_options()
 	_options_scroll.visible = false
-	_panel.offset_top = PANEL_TOP_TEXT
 	_panel.visible = true
 	_start_typewriter(text.length())
 
@@ -245,7 +250,6 @@ func skip_typewriter() -> void:
 	_is_typing = false
 
 
-# Show text+buttons for a choice. Returns selected index.
 func show_options(speaker: String, prompt: String, options: Array) -> int:
 	_speaker_label.text = speaker
 	_text_label.text = prompt
@@ -264,7 +268,6 @@ func show_options(speaker: String, prompt: String, options: Array) -> int:
 		if first == null:
 			first = button
 
-	_panel.offset_top = PANEL_TOP_OPTIONS
 	_options_scroll.visible = true
 	_panel.visible = true
 	if first != null:
@@ -290,7 +293,7 @@ func hide_text_input() -> void:
 
 
 func set_directions(dest_name: String, instruction: String) -> void:
-	_dir_title.text = "→ " + dest_name
+	_dir_title.text = dest_name
 	_dir_text.text = instruction
 	_dir_panel.visible = true
 

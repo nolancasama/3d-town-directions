@@ -43,6 +43,7 @@ func setup(player_camera: Camera3D) -> void:
 # its arm) to the return leg.
 func focus_on(target: Node3D, from_pos: Vector3, hold_seconds: float) -> void:
 	await pan_to(target, from_pos)
+	await pan_to_roof(target)
 	await get_tree().create_timer(hold_seconds).timeout
 	await pan_back()
 
@@ -66,6 +67,24 @@ func pan_to(target: Node3D, from_pos: Vector3) -> void:
 	_end_transform = Transform3D(Basis(), end_pos).looking_at(
 			target.global_position, Vector3.UP)
 
+	var tween := create_tween()
+	tween.set_trans(Tween.TRANS_SINE)
+	tween.set_ease(Tween.EASE_IN_OUT)
+	tween.tween_method(_apply_blend, 0.0, 1.0, BLEND_SECONDS)
+	await tween.finished
+
+
+# Tilt up from the current vantage to look at the roofline of the target building.
+# Called after pan_to so the camera is already positioned; this just arcs the gaze upward.
+func pan_to_roof(target: Node3D) -> void:
+	_start_transform = _camera.global_transform
+	var roof_y: float
+	if target.has_meta("label_pos"):
+		roof_y = (target.get_meta("label_pos") as Vector3).y
+	else:
+		roof_y = target.global_position.y + 10.0
+	var look_pos := Vector3(target.global_position.x, roof_y, target.global_position.z)
+	_end_transform = Transform3D(Basis(), _start_transform.origin).looking_at(look_pos, Vector3.UP)
 	var tween := create_tween()
 	tween.set_trans(Tween.TRANS_SINE)
 	tween.set_ease(Tween.EASE_IN_OUT)

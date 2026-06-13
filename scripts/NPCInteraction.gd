@@ -188,7 +188,7 @@ func _begin_greet() -> void:
 	_speech.listen()
 
 
-func _greet() -> void:
+func _greet(via_keyboard: bool = true) -> void:
 	_state = State.ASK
 	_conversing = true
 	_greeted = false
@@ -196,15 +196,16 @@ func _greet() -> void:
 	_dialogue.show_text("Townsperson", "Yes?")
 	_face_target(_player)
 	_speech.listen()
-	_dialogue.show_text_input()
+	if via_keyboard:
+		_dialogue.show_text_input()
 
 
 func _on_heard(text: String) -> void:
 	if _active != self or _cinematic:
 		return
 	var t := _clean(text)
-	if _state == State.GREET and (t.contains("excuse me") or t.contains("pardon me") or t.contains("hello") or t.contains("good morning")):
-		_greet()
+	if _state == State.GREET and t.contains("excuse me"):
+		_greet(false)
 	elif _state == State.ASK and (t.contains("bye") or t.contains("goodbye") or t.contains("see you") or t.contains("thank you")):
 		var farewells := ["See you!", "Take care!", "Goodbye!", "Anytime, good luck!"]
 		var r: String = farewells[randi() % farewells.size()]
@@ -226,7 +227,7 @@ func _on_heard(text: String) -> void:
 		_dialogue.speak(r)
 		_dialogue.show_text("Townsperson", r)
 		_speech.listen()
-	elif _state == State.ASK and t.contains("where is"):
+	elif _state == State.ASK and (t.contains("where is") or t.contains("wheres")):
 		var dest := _match_goal(t)
 		if dest == "":
 			_dialogue.speak("Sorry, I don't know that place.")
@@ -267,6 +268,7 @@ func _deliver(dest_name: String) -> void:
 	await _raise_arm()
 	# Arm stays pointing through the pan out and the hold...
 	await _camera_focus.pan_to(target, global_position)
+	await _camera_focus.pan_to_roof(target)
 	await get_tree().create_timer(POINT_HOLD_SECONDS).timeout
 	# ...then it comes back down as the camera pans back to the player.
 	_lower_arm()

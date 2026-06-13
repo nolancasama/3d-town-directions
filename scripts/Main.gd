@@ -50,7 +50,7 @@ const GOAL_DEFS := {
 	"Bakery": {"style": "shop", "size": Vector3(12, 7, 11), "color": Color(0.86, 0.72, 0.55), "accent": Color(0.75, 0.45, 0.30)},
 	"Bookstore": {"style": "shop", "size": Vector3(12, 7, 11), "color": Color(0.45, 0.36, 0.55), "accent": Color(0.30, 0.22, 0.40)},
 	"Starbucks": {"style": "shop", "size": Vector3(11, 6, 11), "color": Color(0.10, 0.42, 0.27), "accent": Color(0.05, 0.30, 0.18)},
-	"McDonald's": {"style": "shop", "size": Vector3(12, 6, 11), "color": Color(0.74, 0.13, 0.11), "accent": Color(0.95, 0.78, 0.10)},
+	"Restaurant": {"style": "shop", "size": Vector3(12, 6, 11), "color": Color(0.74, 0.13, 0.11), "accent": Color(0.95, 0.78, 0.10)},
 	"Supermarket": {"style": "market", "size": Vector3(20, 7, 18), "color": Color(0.80, 0.34, 0.26), "accent": Color(0.55, 0.20, 0.15)},
 	"Convenience Store": {"style": "shop", "size": Vector3(12, 6, 11), "color": Color(0.90, 0.55, 0.20), "accent": Color(0.55, 0.30, 0.10)},
 	"Diner": {"style": "diner", "size": Vector3(12, 5, 11), "color": Color(0.80, 0.82, 0.85), "accent": Color(0.80, 0.20, 0.20)},
@@ -59,18 +59,18 @@ const GOAL_DEFS := {
 	"Swimming Pool": {"style": "pool", "size": Vector3(20, 3, 16), "color": Color(0.80, 0.80, 0.82), "accent": Color(0.25, 0.55, 0.85)},
 	"Church": {"style": "church", "size": Vector3(14, 9, 16), "color": Color(0.95, 0.95, 0.93)},
 	"Chapel": {"style": "church", "size": Vector3(12, 9, 14), "color": Color(0.93, 0.92, 0.88)},
-	"Train Station": {"style": "station", "size": Vector3(20, 7, 12), "color": Color(0.72, 0.58, 0.45), "accent": Color(0.25, 0.40, 0.30)},
+	"Hotel": {"style": "office", "size": Vector3(14, 13, 13), "color": Color(0.72, 0.68, 0.64), "accent": Color(0.55, 0.50, 0.48)},
 	"Nolan's House": {"style": "house", "size": Vector3(10, 4, 9), "color": Color(0.78, 0.72, 0.62), "accent": Color(0.38, 0.25, 0.18)},
 }
 
 # One goal per block across the 5x5 grid (rows north->south, cols west->east).
 # The central block is the Park (town green).
 const GOAL_GRID := [
-	["Train Station", "School", "Convenience Store", "Diner", "Nolan's House"],
+	["Hotel", "School", "Convenience Store", "", "Nolan's House"],
 	["Hospital", "Library", "Bakery", "Bank", "Police Station"],
 	["Drugstore", "Museum", "Park", "Post Office", "Fire Station"],
-	["Church", "Starbucks", "McDonald's", "City Hall", "Town Office"],
-	["Chapel", "Swimming Pool", "Supermarket", "Bookstore", "Gas Station"],
+	["Church", "Starbucks", "Restaurant", "City Hall", ""],
+	["", "Swimming Pool", "Supermarket", "Bookstore", "Gas Station"],
 ]
 
 const BLOCK_CENTERS := [-108.0, -54.0, 0.0, 54.0, 108.0]   # world block centres
@@ -119,6 +119,10 @@ var _bus_origin_x: float
 var _icon_nodes: Dictionary = {}   # building name -> Node3D (hidden until discovered)
 var _icons_root: Node3D
 var _cine_skip: bool = false
+var _orbit_tween: Tween = null
+var _orbit_a1: float = 0.0
+var _walk_finished: bool = false   # instance var: GDScript lambdas capture locals by VALUE,
+                                   # so the walk_done callback must write to a member, not a local.
 
 
 func _ready() -> void:
@@ -140,9 +144,61 @@ func _ready() -> void:
 	var goal_names: Array = []
 	var layout := _layout_buildings()
 	_build_town(layout, goals, goal_names)
+	# Train Station goal is the new north platform (not a grid block building).
+	# Registered manually so NPCs can navigate the player there.
+	var ts_anchor := Node3D.new()
+	ts_anchor.name = "TrainStationAnchor"
+	ts_anchor.position = Vector3(0, 0, -148)
+	add_child(ts_anchor)
+	ts_anchor.set_meta("goal_spot", Vector3(0, 0, -145))
+	ts_anchor.set_meta("goal_reach", 8.0)
+	ts_anchor.set_meta("goal_street_axis_x", false)
+	ts_anchor.set_meta("goal_street_line", -135.0)
+	ts_anchor.set_meta("goal_seg_half", HALF_BLOCK - HALF)
+	ts_anchor.set_meta("label_pos", Vector3(0, 7.0, -148))
+	goals["Train Station"] = ts_anchor
+	goal_names.append("Train Station")
+
+	# Beach goal — ring appears on the sand.
+	var beach_anchor := Node3D.new()
+	beach_anchor.name = "BeachAnchor"
+	beach_anchor.position = Vector3(0, 0, 162)
+	add_child(beach_anchor)
+	beach_anchor.set_meta("goal_spot", Vector3(0, 0, 162))
+	beach_anchor.set_meta("goal_reach", 14.0)
+	beach_anchor.set_meta("goal_street_axis_x", false)
+	beach_anchor.set_meta("goal_street_line", 135.0)
+	beach_anchor.set_meta("goal_seg_half", HALF_BLOCK - HALF)
+	beach_anchor.set_meta("label_pos", Vector3(0, 5.0, 162))
+	goals["Beach"] = beach_anchor
+	goal_names.append("Beach")
+
+	# Shopping Mall goal — ring appears in front of the west entrance (facing the sidewalk).
+	var mall_anchor := Node3D.new()
+	mall_anchor.name = "MallAnchor"
+	mall_anchor.position = Vector3(162, 0, -27)
+	add_child(mall_anchor)
+	mall_anchor.set_meta("goal_spot", Vector3(141, 0, -27))
+	mall_anchor.set_meta("goal_reach", 12.0)
+	mall_anchor.set_meta("goal_street_axis_x", true)
+	mall_anchor.set_meta("goal_street_line", 135.0)
+	mall_anchor.set_meta("goal_seg_half", HALF_BLOCK - HALF)
+	mall_anchor.set_meta("label_pos", Vector3(162, 12.0, -27))
+	goals["Shopping Mall"] = mall_anchor
+	goal_names.append("Shopping Mall")
+
 	# Lampposts go in after the buildings so they can be placed in the gaps
 	# between the frontage buildings rather than in front of a door.
 	_build_lampposts(layout)
+
+	# Expanded world zones (beach, train tracks, woods, mall).
+	var terrain := Node3D.new()
+	terrain.name = "Terrain"
+	add_child(terrain)
+	_build_beach(terrain)
+	_build_train_tracks(terrain)
+	_build_woods(terrain)
+	_build_mall(terrain)
 
 	# Merge all the static road + building geometry into one mesh grouped by
 	# material. This turns ~1000+ draw calls into a few dozen so the WebGL2
@@ -222,10 +278,21 @@ func _play_intro(player: PlayerController) -> void:
 	player.global_position = Vector3(bus.position.x + 2.5, 0.0, bus.position.z - 1.5)
 	player.rotation.y = 0.0
 	player.visible = true
-	var wt := create_tween()
-	wt.set_trans(Tween.TRANS_LINEAR)
-	wt.tween_property(player, "global_position", player_start, 5.0)
-	await _cine_wait(5.5)
+	player.walk_to(player_start, 3.0)   # half speed for cinematic walk
+	_walk_finished = false
+	player.walk_done.connect(func(): _walk_finished = true, CONNECT_ONE_SHOT)
+	while not _walk_finished:
+		await get_tree().process_frame
+		if _cine_skip:
+			_cine_skip = false
+			player.stop_walk()
+			player.global_position = player_start
+			break
+	# Kill the orbit and snap to its end position so the camera is free for section 2.
+	if _orbit_tween != null:
+		_orbit_tween.kill()
+		_orbit_tween = null
+		_apply_intro_orbit(_orbit_a1)
 	player.rotation.y = PI  # face south — toward the camera for his introduction
 
 	# 2) Hard cut to side bus shot.
@@ -269,7 +336,7 @@ func _play_intro(player: PlayerController) -> void:
 	var face_pos := Vector3(0, 2.5, 24)
 	_dialogue.show_text("Matsubara kun", "Hi! I'm Matsubara kun! This is my first time in America.")
 	await _intro_move(Vector3(0, 2.0, 32), face_pos, Vector3(0, 1.5, 23.75), focus, 5.0)
-	await _cine_wait(5.0)
+	await _cine_wait(1.0)
 
 	# 5) Town pan shots.
 	player.rotation.y = PI
@@ -329,6 +396,7 @@ func _play_intro(player: PlayerController) -> void:
 	_intro_cam = null
 	player.camera.current = true
 	player.set_input_enabled(true)
+	_dialogue.show_discovery_panel()
 	_fade_out_bgm()
 
 
@@ -498,21 +566,25 @@ func _cine_wait(seconds: float) -> void:
 
 func _intro_orbit(center: Vector3, radius: float, height: float,
 		a0: float, a1: float, dur: float) -> void:
+	_orbit_a1 = a1
 	_io_center = center
 	_io_radius = radius
 	_io_height = height
 	_apply_intro_orbit(a0)
-	var t := create_tween()
-	t.set_trans(Tween.TRANS_SINE)
-	t.set_ease(Tween.EASE_IN_OUT)
-	t.tween_method(_apply_intro_orbit, a0, a1, dur)
-	while t.is_running():
+	_orbit_tween = create_tween()
+	_orbit_tween.set_trans(Tween.TRANS_SINE)
+	_orbit_tween.set_ease(Tween.EASE_IN_OUT)
+	_orbit_tween.tween_method(_apply_intro_orbit, a0, a1, dur)
+	while _orbit_tween != null and _orbit_tween.is_running():
 		await get_tree().process_frame
 		if _cine_skip:
 			_cine_skip = false
-			t.kill()
+			if _orbit_tween != null:
+				_orbit_tween.kill()
+				_orbit_tween = null
 			_apply_intro_orbit(a1)
 			return
+	_orbit_tween = null
 
 
 func _apply_intro_orbit(a: float) -> void:
@@ -850,7 +922,7 @@ func _make_npc(pos: Vector3, p: PackedVector3Array, c: Array,
 func _bake_static_meshes() -> void:
 	var tools := {}        # Material -> SurfaceTool
 	var order := []        # keep a stable material order
-	for root_name in ["Roads", "Town"]:
+	for root_name in ["Roads", "Town", "Terrain"]:
 		var root := get_node_or_null(NodePath(root_name))
 		if root == null:
 			continue
@@ -951,17 +1023,23 @@ func _build_ground() -> void:
 	add_child(ground)
 
 
-# Invisible walls ringing the town so the player can't walk off the edge.
+# Invisible walls ringing the expanded world (beach south, woods west, mall east,
+# train tracks north). Different per-side distances accommodate each new zone.
 func _build_bounds() -> void:
 	var bounds := StaticBody3D.new()
 	bounds.name = "Bounds"
-	var b := EXT + 8.0      # just outside the outermost street
 	var h := 12.0
+	var bn := 195.0   # north: backup behind train-track barrier
+	var bs := 215.0   # south: past the beach sand
+	var bw := 230.0   # west: deep into the woods
+	var be := 208.0   # east: just past the mall building (prevents groundless escape)
+	var wide := bw + be + 10.0
+	var tall := bn + bs + 10.0
 	for spec in [
-		[Vector3(0, h * 0.5, -b), Vector3(b * 2, h, 3)],   # north
-		[Vector3(0, h * 0.5, b), Vector3(b * 2, h, 3)],    # south
-		[Vector3(-b, h * 0.5, 0), Vector3(3, h, b * 2)],   # west
-		[Vector3(b, h * 0.5, 0), Vector3(3, h, b * 2)],    # east
+		[Vector3(0, h * 0.5, -bn), Vector3(wide, h, 3)],
+		[Vector3(0, h * 0.5, bs), Vector3(wide, h, 3)],
+		[Vector3(-bw, h * 0.5, 0), Vector3(3, h, tall)],
+		[Vector3(be, h * 0.5, 0), Vector3(3, h, tall)],
 	]:
 		var col := CollisionShape3D.new()
 		var shape := BoxShape3D.new()
@@ -970,6 +1048,17 @@ func _build_bounds() -> void:
 		col.position = spec[0]
 		bounds.add_child(col)
 	add_child(bounds)
+
+	# East sidewalk barrier — continuous invisible wall at x=143 (outer edge of east sidewalk).
+	var esb := StaticBody3D.new()
+	esb.name = "EastSidewalkBarrier"
+	var sc := CollisionShape3D.new()
+	var ss := BoxShape3D.new()
+	ss.size = Vector3(1.2, h, bn + bs)
+	sc.shape = ss
+	sc.position = Vector3(143.0, h * 0.5, (-bn + bs) * 0.5)
+	esb.add_child(sc)
+	add_child(esb)
 
 
 # Add a vertical collision cylinder to the shared Props body (for a lamppost or
@@ -1015,7 +1104,8 @@ func _build_roads() -> void:
 	for gx in GRID:
 		_slab(roads, Vector3(ROAD_W, 0.06, EXT * 2), Vector3(gx, 0.0, 0), ASPHALT)
 	for gz in GRID:
-		_slab(roads, Vector3(EXT * 2, 0.06, ROAD_W), Vector3(0, 0.0, gz), ASPHALT)
+		# Span = 270 → roads stop at x=±135 (outermost N-S grid lines), no stubs into mall/woods zones.
+		_slab(roads, Vector3(270.0, 0.06, ROAD_W), Vector3(0, 0.0, gz), ASPHALT)
 
 	_build_sidewalks(roads)
 	_build_lane_lines(roads)
@@ -1040,6 +1130,8 @@ func _build_sidewalks(roads: Node3D) -> void:
 		for side in [-1.0, 1.0]:
 			var z: float = gz + side * SW_OFF
 			for seg in _segments():
+				if seg.x >= 134.9 or seg.y <= -134.9:
+					continue   # skip stubs east/west of the outermost N-S grid lines
 				_slab(roads, Vector3(seg.y - seg.x, 0.10, SW_W),
 						Vector3((seg.x + seg.y) * 0.5, 0.0, z), SIDEWALK)
 
@@ -1068,13 +1160,17 @@ func _build_lane_lines(roads: Node3D) -> void:
 		while p < EXT:
 			if not _near_grid(p, HALF + 2.0):
 				_slab(roads, Vector3(0.35, 0.04, 2.4), Vector3(line, 0.06, p), LINE)
-				_slab(roads, Vector3(2.4, 0.04, 0.35), Vector3(p, 0.06, line), LINE)
+				if absf(p) < 135.0:   # E-W dashes stop at grid boundary — no stubs past x=±135
+					_slab(roads, Vector3(2.4, 0.04, 0.35), Vector3(p, 0.06, line), LINE)
 			p += 5.0
 
 
 # Four zebra crosswalks (one per arm) painted on the road at an intersection.
 func _build_crosswalks(roads: Node3D, gx: float, gz: float) -> void:
 	for sx in [-1.0, 1.0]:
+		# Only the z=27 east-sidewalk crossing is kept (parking-lot entrance); all others removed.
+		if gx == 135.0 and sx == 1.0 and gz != 27.0:
+			continue
 		_crosswalk(roads, Vector3(gx + sx * SW_OFF, 0.06, gz), true)   # across the E-W road
 	for sz in [-1.0, 1.0]:
 		_crosswalk(roads, Vector3(gx, 0.06, gz + sz * SW_OFF), false)  # across the N-S road
@@ -1252,7 +1348,7 @@ func _build_town(layout: Array, goals: Dictionary, goal_names: Array) -> void:
 			# Buildings with facade icons (cross, burger) — added as hidden nodes
 			# under _icons_root so they're excluded from baking and can be revealed
 			# individually when the player discovers that building.
-			if cfg.name in ["Hospital", "McDonald's"]:
+			if cfg.name in ["Hospital", "Restaurant", "Drugstore", "Church", "Bakery", "Police Station", "Bookstore"]:
 				_add_icon_for_building(cfg.name, size, node)
 
 
@@ -1281,18 +1377,29 @@ func _layout_buildings() -> Array:
 				out.append({"name": "Park", "pos": Vector3(0, 0, 0), "size": Vector3(40, 0.08, 40),
 						"color": Color(0.30, 0.55, 0.27), "style": "park", "goal": true})
 				continue
-			# Goal fronts the inner street (toward downtown); block centre stays
-			# open so nothing is landlocked without road access.
-			var d: Dictionary = GOAL_DEFS[gname]
-			var gcfg := {"name": gname, "pos": _front_inner(cx, cz, d.size),
-					"size": d.size, "style": d.style, "goal": true}
-			if d.has("color"):
-				gcfg["color"] = d.color
-			if d.has("accent"):
-				gcfg["accent"] = d.accent
-			out.append(gcfg)
-			var placed := [_footprint(gcfg)]
-			# Main ring of houses around the goal.
+			var placed := []
+			if gname != "":
+				# Goal fronts the inner street (toward downtown); block centre stays
+				# open so nothing is landlocked without road access.
+				var d: Dictionary = GOAL_DEFS[gname]
+				var pos: Vector3
+				if gname == "Gas Station":
+					# Corner placement: set back equally from both inner street lines.
+					pos = Vector3(
+						cx - signf(cx) * (HALF_BLOCK - SB - d.size.z * 0.5),
+						0,
+						cz - signf(cz) * (HALF_BLOCK - SB - d.size.z * 0.5))
+				else:
+					pos = _front_inner(cx, cz, d.size)
+				var gcfg := {"name": gname, "pos": pos,
+						"size": d.size, "style": d.style, "goal": true}
+				if d.has("color"):
+					gcfg["color"] = d.color
+				if d.has("accent"):
+					gcfg["accent"] = d.accent
+				out.append(gcfg)
+				placed = [_footprint(gcfg)]
+			# Main ring of houses around the goal (or around empty blocks).
 			for ox in [-SLOT, 0.0, SLOT]:
 				for oz in [-SLOT, 0.0, SLOT]:
 					if ox == 0.0 and oz == 0.0:
@@ -1646,7 +1753,7 @@ func _awning(body: Node3D, size: Vector3, accent: Color) -> void:
 	_box(body, Vector3(size.x + 0.4, 0.3, 1.6), Vector3(0, 3.0, size.z * 0.5 + 0.7), accent)
 
 
-# A hamburger icon on the front wall (for McDonald's).
+# A hamburger icon on the front wall (for Restaurant).
 func _burger(body: Node3D, size: Vector3) -> void:
 	var z := size.z * 0.5 + 0.12
 	var bun := Color(0.86, 0.62, 0.33)
@@ -1734,13 +1841,13 @@ func _chimney(body: Node3D, size: Vector3) -> void:
 
 func _steeple(body: Node3D, size: Vector3) -> void:
 	var x := 0.0
-	var z := -size.z * 0.5 + 1.5
+	var z := size.z * 0.5 - 1.5   # front of building
 	_box(body, Vector3(3.0, size.y + 4.0, 3.0), Vector3(x, (size.y + 4.0) * 0.5, z), Color(0.92, 0.92, 0.90))
 	_prism(body, Vector3(3.2, 4.0, 3.2), Vector3(x, size.y + 6.0, z), Color(0.45, 0.30, 0.35))
 
 
 func _steeple_cross(body: Node3D, size: Vector3) -> void:
-	var z := -size.z * 0.5 + 1.5 + 1.52   # front face of steeple tower
+	var z := size.z * 0.5 - 1.5 + 1.52   # front face of steeple tower
 	var y := size.y + 5.2
 	var white := Color(0.98, 0.98, 0.96)
 	_box(body, Vector3(0.28, 1.8, 0.14), Vector3(0, y, z), white)
@@ -1754,10 +1861,88 @@ func _add_icon_for_building(bname: String, size: Vector3, body: Node3D) -> void:
 	match bname:
 		"Hospital":
 			_cross(icon, size)
-		"McDonald's":
+		"Restaurant":
 			_burger(icon, size)
+		"Drugstore":
+			_drugstore_cross(icon, size)
+		"Church":
+			_church_cross_icon(icon, size)
+		"Bakery":
+			_baguette(icon, size)
+		"Police Station":
+			_sheriff_badge(icon, size)
+		"Bookstore":
+			_bookstore_book(icon, size)
 	icon.visible = false
 	_icon_nodes[bname] = icon
+
+
+func _drugstore_cross(body: Node3D, size: Vector3) -> void:
+	var z := size.z * 0.5 + 0.1
+	var y := size.y - 1.3
+	var green := Color(0.10, 0.68, 0.38)
+	_box(body, Vector3(0.55, 1.8, 0.20), Vector3(0, y, z), green)
+	_box(body, Vector3(1.7, 0.55, 0.20), Vector3(0, y, z), green)
+
+
+func _church_cross_icon(body: Node3D, size: Vector3) -> void:
+	var z := size.z * 0.5 + 0.1
+	var y := size.y - 1.2
+	var gold := Color(0.94, 0.82, 0.28)
+	_box(body, Vector3(0.30, 2.2, 0.16), Vector3(0, y, z), gold)
+	_box(body, Vector3(1.30, 0.30, 0.16), Vector3(0, y + 0.45, z), gold)
+
+
+func _baguette(body: Node3D, size: Vector3) -> void:
+	var z := size.z * 0.5 + 0.12
+	var y := size.y - 1.2
+	var m := MeshInstance3D.new()
+	var cap := CapsuleMesh.new()
+	cap.radius = 0.20
+	cap.height = 2.8
+	m.mesh = cap
+	m.material_override = _mat(Color(0.82, 0.64, 0.30))
+	m.position = Vector3(0.15, y, z)
+	m.rotation.z = 0.18
+	m.scale = Vector3(1.0, 1.0, 0.30)
+	body.add_child(m)
+	for i in 3:
+		var t := -0.52 + i * 0.52
+		_box(body, Vector3(0.52, 0.10, 0.08),
+				Vector3(0.15 + t * sin(0.18) * 0.5, y + t * cos(0.18) * 0.5, z + 0.16),
+				Color(0.58, 0.38, 0.16))
+
+
+func _sheriff_badge(body: Node3D, size: Vector3) -> void:
+	var z := size.z * 0.5 + 0.1
+	var y := size.y - 1.4
+	var gold := Color(0.90, 0.76, 0.18)
+	var dark := Color(0.40, 0.28, 0.06)
+	_box(body, Vector3(1.5, 1.5, 0.14), Vector3(0, y, z), dark)
+	var star := Node3D.new()
+	star.position = Vector3(0, y, z + 0.09)
+	body.add_child(star)
+	for i in 5:
+		var ang := float(i) * TAU / 5.0
+		var arm := Node3D.new()
+		arm.rotation.z = -ang
+		star.add_child(arm)
+		_box(arm, Vector3(0.20, 0.72, 0.12), Vector3(0, 0.37, 0), gold)
+	_box(body, Vector3(0.32, 0.32, 0.20), Vector3(0, y, z + 0.12), gold)
+
+
+func _bookstore_book(body: Node3D, size: Vector3) -> void:
+	var z := size.z * 0.5 + 0.1
+	var y := size.y - 1.4
+	var cover := Color(0.22, 0.35, 0.62)
+	var spine := Color(0.14, 0.24, 0.48)
+	var page  := Color(0.96, 0.94, 0.88)
+	_box(body, Vector3(0.20, 1.9, 0.18), Vector3(-0.82, y, z), spine)
+	_box(body, Vector3(1.40, 1.9, 0.16), Vector3(0.12, y, z), cover)
+	_box(body, Vector3(1.26, 1.72, 0.20), Vector3(0.12, y, z + 0.02), page)
+	for i in 3:
+		_box(body, Vector3(0.84, 0.07, 0.07),
+				Vector3(0.12, y - 0.46 + i * 0.46, z + 0.12), Color(0.75, 0.75, 0.80))
 
 
 func _motel_doors(body: Node3D, size: Vector3) -> void:
@@ -1811,8 +1996,10 @@ func _build_station(body: Node3D, size: Vector3, color: Color, roof: Color) -> v
 
 
 func _build_gas(body: Node3D, size: Vector3) -> void:
-	# Canopy on four posts.
-	var canopy_h := 4.2
+	# Grey cement ground pad.
+	_box(body, Vector3(size.x, 0.08, size.z), Vector3(0, 0.04, 0), Color(0.62, 0.63, 0.64))
+	# Canopy on four posts — raised 50 % (4.2 → 6.3).
+	var canopy_h := 6.3
 	_box(body, Vector3(size.x, 0.5, size.z), Vector3(0, canopy_h, 0), Color(0.90, 0.90, 0.92))
 	_box(body, Vector3(size.x, 0.25, size.z), Vector3(0, canopy_h - 0.3, 0), Color(0.80, 0.20, 0.20))  # trim
 	for sx in [-1.0, 1.0]:
@@ -1942,3 +2129,234 @@ func _mat(color: Color) -> StandardMaterial3D:
 		mat.albedo_color = color
 		_mat_cache[color] = mat
 	return _mat_cache[color]
+
+
+# =============================================================================
+# World zone builders
+# =============================================================================
+
+func _build_beach(terrain: Node3D) -> void:
+	var sand      := Color(0.93, 0.84, 0.60)
+	var wet_sand  := Color(0.80, 0.74, 0.52)
+	var ocean     := Color(0.18, 0.42, 0.76)
+
+	# Sand starts at z=143 (clear of the southernmost sidewalk which ends ~z=141.7).
+	# Widths capped at 396 so nothing hangs past the ground plane's x=±198 edge.
+	# Dry sand strip (z=143 → z=191)
+	_box(terrain, Vector3(396, 0.30, 48), Vector3(0, 0.0, 167.0), sand)
+	# Wet sand at waterline (z=191 → z=201)
+	_box(terrain, Vector3(396, 0.20, 10), Vector3(0, -0.04, 196.0), wet_sand)
+	# Ocean (z=198 → z=318, mostly beyond player reach but looks infinite)
+	_box(terrain, Vector3(396, 0.15, 120), Vector3(0, -0.08, 258.0), ocean)
+
+	# Impassable wall at the water's edge so the player can't walk into the ocean.
+	var water_wall := StaticBody3D.new()
+	water_wall.name = "WaterBarrier"
+	var wc := CollisionShape3D.new()
+	var ws := BoxShape3D.new()
+	ws.size = Vector3(400, 4.0, 1.0)
+	wc.shape = ws
+	wc.position = Vector3(0, 2.0, 192.0)
+	water_wall.add_child(wc)
+	add_child(water_wall)
+
+	# Palm trees scattered along the sand
+	for data in [
+		[-82.0, 152.0], [-55.0, 165.0], [-20.0, 156.0],
+		[15.0, 173.0],  [48.0, 160.0],  [78.0, 149.0],
+	]:
+		_palm(terrain, Vector3(data[0], 0.3, data[1]))
+
+	# Benches sit on the southernmost sidewalk (center z≈140.6) facing the beach.
+	for xi in [-100.0, -60.0, -20.0, 20.0, 60.0, 100.0]:
+		_bench(terrain, Vector3(xi, 0.1, 140.5), 0.0)
+
+
+func _palm(parent: Node3D, base: Vector3) -> void:
+	var trunk := Color(0.55, 0.40, 0.22)
+	var frond  := Color(0.20, 0.54, 0.14)
+	_cylinder(parent, 0.22, 5.0, base + Vector3(0, 2.5, 0), trunk)
+	# Six radiating fronds
+	for i in 6:
+		var a: float = i * TAU / 6.0
+		var ox := cos(a) * 1.2
+		var oz := sin(a) * 1.2
+		_box(parent, Vector3(1.2, 0.10, 3.2), base + Vector3(ox, 5.0, oz), frond)
+	_prop_collider(base, 0.28, 5.0)
+
+
+func _build_train_tracks(terrain: Node3D) -> void:
+	var ballast  := Color(0.54, 0.52, 0.50)
+	var rail     := Color(0.52, 0.54, 0.58)
+	var tie      := Color(0.42, 0.30, 0.18)
+	var platform := Color(0.82, 0.80, 0.76)
+	var z_tr     := -150.0
+	var span     := 396.0   # trimmed to stay within ground plane x=±198
+
+	# Ballast bed
+	_box(terrain, Vector3(span, 0.30, 5.0), Vector3(0, -0.04, z_tr), ballast)
+	# Rails (decorative only — no collision, player can walk through)
+	_box(terrain, Vector3(span, 0.18, 0.22), Vector3(0, 0.22, z_tr - 1.0), rail)
+	_box(terrain, Vector3(span, 0.18, 0.22), Vector3(0, 0.22, z_tr + 1.0), rail)
+	# Ties (sleepers) every 2 units
+	var tx := -196.0
+	while tx <= 196.0:
+		_box(terrain, Vector3(2.8, 0.15, 2.6), Vector3(tx, 0.10, z_tr), tie)
+		tx += 2.6
+
+	# Station platform (south/town side of tracks, accessible to player)
+	_box(terrain, Vector3(28, 0.85, 7), Vector3(0, 0.42, z_tr + 6.5), platform)
+	# Solid collision for the platform slab (baked terrain has no physics by default).
+	_prop_box(Vector3(0, 0.425, z_tr + 6.5), Vector3(28, 0.85, 7), 0.0)
+	# Steps on the EAST side of the platform (east face at x=+14, stepping outward).
+	# Each step gets a matching _prop_box so the player can stand on them.
+	for i in 3:
+		var step_h := 0.85 * (3 - i) / 3.0
+		var step_x := 14.0 + i * 0.8 + 0.4
+		var step_c := Vector3(step_x, step_h * 0.5, z_tr + 6.5)
+		_box(terrain, Vector3(0.8, step_h, 6.0), step_c, platform)
+		_prop_box(step_c, Vector3(0.8, step_h, 6.0), 0.0)
+	# Invisible ramp so CharacterBody3D can walk up the step risers.
+	# Spans x=18.0 → x=14.8, rising from y=0 to y=0.85.  At each riser face the
+	# player's feet are already above the riser height, so they glide up the slope
+	# while the visual steps remain underneath.
+	var r_run  := 3.2       # 18.0 - 14.8
+	var r_rise := 0.85
+	var r_len  := sqrt(r_run * r_run + r_rise * r_rise)
+	var r_ang  := atan2(r_rise, r_run)
+	var ramp   := StaticBody3D.new()
+	ramp.name  = "StepsRamp"
+	var rc     := CollisionShape3D.new()
+	var rs     := BoxShape3D.new()
+	rs.size    = Vector3(r_len, 0.30, 6.0)
+	rc.shape   = rs
+	rc.position = Vector3(16.4 - 0.15 * sin(r_ang), 0.425 - 0.15 * cos(r_ang), z_tr + 6.5)
+	rc.rotation.z = -r_ang
+	ramp.add_child(rc)
+	add_child(ramp)
+	# Canopy roof — raised to y=4.8 so it clears the player's head comfortably.
+	var canopy_y  := 4.8
+	var canopy_sz := Vector3(30, 0.30, 8)
+	var canopy_p  := Vector3(0, canopy_y, z_tr + 6.5)
+	_box(terrain, canopy_sz, canopy_p, Color(0.35, 0.28, 0.60))
+	_prop_box(canopy_p, canopy_sz, 0.0)   # solid roof — player can't pass through
+	# Canopy pillars — height matches new roof bottom
+	for px in [-13.0, 13.0]:
+		var pil_h := canopy_y - 0.15   # top of pillar meets underside of roof
+		var pil_p := Vector3(px, pil_h * 0.5, z_tr + 6.5)
+		_box(terrain, Vector3(0.45, pil_h, 0.45), pil_p, Color(0.75, 0.74, 0.72))
+		_prop_collider(Vector3(px, 0.0, z_tr + 6.5), 0.28, pil_h)
+
+	# Impassable collision barrier along the track line.
+	var barrier := StaticBody3D.new()
+	barrier.name = "TrackBarrier"
+	var col := CollisionShape3D.new()
+	var shape := BoxShape3D.new()
+	shape.size = Vector3(span, 3.5, 1.2)
+	col.shape = shape
+	col.position = Vector3(0, 1.75, z_tr)
+	barrier.add_child(col)
+	add_child(barrier)
+
+
+func _build_woods(terrain: Node3D) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7
+	# Trees start at x=-150 (western sidewalk outer edge is ~x=-141.7; ±3 jitter
+	# keeps everything safely west of the road). Z capped at 133 so no tree lands
+	# on the southern sidewalk or beach.
+	var col_x := -150.0
+	while col_x >= -200.0:
+		var row_z := -140.0
+		while row_z <= 133.0:
+			var jx: float = rng.randf_range(-3.0, 3.0)
+			var jz: float = rng.randf_range(-3.0, 3.0)
+			_tree(terrain, Vector3(col_x + jx, 0.0, row_z + jz))
+			row_z += 10.0
+		col_x -= 14.0
+
+	# Invisible wall at x=-178. Extends south from z=-160 to z=192 so it joins
+	# the water barrier at the beach, sealing the west side completely.
+	# Span = 192 - (-160) = 352, centre = (-160 + 192) / 2 = 16.
+	var barrier := StaticBody3D.new()
+	barrier.name = "WoodsBarrier"
+	var col := CollisionShape3D.new()
+	var shape := BoxShape3D.new()
+	shape.size = Vector3(1.5, 8.0, 352.0)
+	col.shape = shape
+	col.position = Vector3(-178.0, 4.0, 16.0)
+	barrier.add_child(col)
+	add_child(barrier)
+
+
+func _build_mall(terrain: Node3D) -> void:
+	var lot_asphalt := Color(0.20, 0.20, 0.23)
+	var stripe      := Color(0.85, 0.85, 0.85)
+	var mall_wall   := Color(0.88, 0.86, 0.84)
+	var mall_accent := Color(0.70, 0.68, 0.66)
+	var sign_red    := Color(0.84, 0.18, 0.18)
+
+	# Layout (east of town, east sidewalk outer edge ~x=141.7, barrier at x=143):
+	#   Mall       x=144 → x=180  z=-45 → z=-5   (west face at x=144, entrance faces sidewalk)
+	#   Parking lot x=144 → x=180  z=-5  → z=65  (touches mall south face, no gap)
+
+	# --- Continuous east sidewalk -------------------------------------------------
+	# Fill all E-W-road gaps in the east N-S sidewalk (x≈140.6) except z=27, which
+	# becomes the parking-lot entrance driveway.
+	var sw_x := 135.0 + SW_OFF   # sidewalk centre = 140.6
+	for gap_z in [-135.0, -81.0, -27.0, 81.0, 135.0]:   # z=27 left open for entrance
+		_box(terrain, Vector3(SW_W, 0.10, ROAD_W),
+				Vector3(sw_x, 0.0, gap_z), SIDEWALK)
+	# Entrance driveway at z=27: asphalt from east end of road (x=135) to lot edge (x=144).
+	_box(terrain, Vector3(9.0, 0.11, ROAD_W), Vector3(139.5, 0.0, 27.0), lot_asphalt)
+	# -------------------------------------------------------------------------------
+
+	# Parking lot: south face of mall at z=-7 (mall center z=-27, half-depth=20).
+	# Lot spans z=-7 to z=65, center z=29, depth 72.
+	_box(terrain, Vector3(36, 0.06, 72), Vector3(162, 0.0, 29), lot_asphalt)
+	for zi in range(6):
+		_box(terrain, Vector3(32, 0.08, 0.22), Vector3(162, 0.05, 1.0 + zi * 12.0), stripe)
+
+	# Mall building — StaticBody3D so the player collides with it.
+	# Centre at (162, 0, -27): west face at x=144 (entrance), aligned with z=-27 E-W road.
+	var mall := StaticBody3D.new()
+	mall.name = "Mall"
+	mall.position = Vector3(162, 0, -27)
+	add_child(mall)
+
+	var mw := Vector3(36, 10, 40)   # east-west width, height, north-south depth
+	_collide(mall, mw)
+	_box(mall, mw, Vector3(0, mw.y * 0.5, 0), mall_wall)
+	# Decorative accent band near top
+	_box(mall, Vector3(mw.x + 0.2, 1.5, mw.z + 0.2), Vector3(0, mw.y - 0.75, 0), mall_accent)
+	# Glass windows on the WEST face (local x = -mw.x/2 = -18), facing the sidewalk
+	for c2 in range(4):
+		for r2 in range(2):
+			_box_mat(mall, Vector3(0.2, 3.2, 5.0),
+					Vector3(-mw.x * 0.5 + 0.15, 2.5 + r2 * 4.0, -13.5 + c2 * 9.0),
+					_glass())
+	# Entrance on west face — framed double door with overhead canopy.
+	var door_dark  := Color(0.22, 0.20, 0.18)   # dark charcoal door panels
+	var frame_col  := Color(0.60, 0.58, 0.54)   # light concrete frame / pilasters
+	var wx := -mw.x * 0.5   # local x of west face = -18
+	# Side pilasters flanking the 4-unit opening
+	_box(mall, Vector3(0.35, 3.8, 0.4), Vector3(wx + 0.17, 1.9, -2.2), frame_col)
+	_box(mall, Vector3(0.35, 3.8, 0.4), Vector3(wx + 0.17, 1.9,  2.2), frame_col)
+	# Lintel spanning the opening
+	_box(mall, Vector3(0.35, 0.55, 4.8), Vector3(wx + 0.17, 3.73, 0), frame_col)
+	# Left door panel
+	_box(mall, Vector3(0.18, 3.1, 1.75), Vector3(wx + 0.09, 1.55, -0.9), door_dark)
+	# Right door panel
+	_box(mall, Vector3(0.18, 3.1, 1.75), Vector3(wx + 0.09, 1.55,  0.9), door_dark)
+	# Thin centre divider strip
+	_box(mall, Vector3(0.22, 3.1, 0.12), Vector3(wx + 0.11, 1.55, 0), mall_wall)
+	# Canopy protruding from above the door
+	_box(mall, Vector3(0.9, 0.18, 5.0), Vector3(wx - 0.27, 4.0, 0), mall_accent)
+	# Rooftop sign on west face
+	_box(mall, Vector3(0.4, 1.8, 20.0), Vector3(-mw.x * 0.5, mw.y + 0.9, 0), sign_red)
+
+	# Lampposts flanking the mall entrance and along the parking lot
+	for lz in [-35.0, -19.0]:
+		_add_lamppost(terrain, Vector3(143.5, 0.0, lz))   # beside west entrance
+	for lx in [150.0, 162.0, 174.0]:
+		_add_lamppost(terrain, Vector3(lx, 0.0, 35.0))    # mid lot
