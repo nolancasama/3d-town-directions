@@ -1224,8 +1224,11 @@ func _build_lane_lines(roads: Node3D) -> void:
 # Four zebra crosswalks (one per arm) painted on the road at an intersection.
 func _build_crosswalks(roads: Node3D, gx: float, gz: float) -> void:
 	for sx in [-1.0, 1.0]:
-		# Only the z=27 east-sidewalk crossing is kept (parking-lot entrance); all others removed.
+		# East outer sidewalk: only the z=27 crossing kept (parking-lot entrance).
 		if gx == 135.0 and sx == 1.0 and gz != 27.0:
+			continue
+		# West outer sidewalk: no road beyond, so no crosswalk on the grass.
+		if gx == -135.0 and sx == -1.0:
 			continue
 		_crosswalk(roads, Vector3(gx + sx * SW_OFF, 0.06, gz), true)   # across the E-W road
 	for sz in [-1.0, 1.0]:
@@ -2008,8 +2011,11 @@ func _coffee_cup(body: Node3D, size: Vector3) -> void:
 	var dark_g := Color(0.06, 0.28, 0.18)
 	var coffee := Color(0.20, 0.11, 0.05)
 	var steam  := Color(0.88, 0.88, 0.90)
-	# Cup body (white)
-	_box(body, Vector3(1.30, 1.70, 0.18), Vector3(0, y, z), white)
+	# Cup body: four stacked slabs tapering inward toward the bottom.
+	_box(body, Vector3(1.30, 0.43, 0.18), Vector3(0, y + 0.64, z), white)
+	_box(body, Vector3(1.20, 0.43, 0.18), Vector3(0, y + 0.21, z), white)
+	_box(body, Vector3(1.10, 0.43, 0.18), Vector3(0, y - 0.21, z), white)
+	_box(body, Vector3(1.00, 0.44, 0.18), Vector3(0, y - 0.64, z), white)
 	# Collar / rim
 	_box(body, Vector3(1.50, 0.16, 0.22), Vector3(0, y + 0.85, z), dark_g)
 	# Dark coffee surface near the top
