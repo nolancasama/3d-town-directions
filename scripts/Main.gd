@@ -332,13 +332,13 @@ func _play_intro(player: PlayerController) -> void:
 
 	# 4) Push-in to the player's face — Matsubara introduces himself.
 	var face_pos := Vector3(0, 2.5, 24)
-	_dialogue.show_text("Matsubara kun", "Hi! I'm Matsubara kun! This is my first time in America.")
+	_dialogue.show_text("Matsubara kun", "やあ！ぼく松原くんやで！アメリカ来るの初めてやねん！")
 	await _intro_move(Vector3(0, 2.0, 32), face_pos, Vector3(0, 1.5, 23.75), focus, 5.0)
 	await _cine_wait(1.0)
 
 	# 5) Town pan shots.
 	player.rotation.y = PI
-	_dialogue.show_text("Matsubara kun", "Wow! America is so big!")
+	_dialogue.show_text("Matsubara kun", "わあ！めっちゃ広いなあ、アメリカ！")
 	await _intro_move(Vector3(0, 4, -12), Vector3(0, 4, -12),
 			Vector3(-35, 5, -54), Vector3(35, 5, -54), 3.8)
 	await _intro_move(Vector3(12, 4, 0), Vector3(12, 4, 0),
@@ -349,20 +349,20 @@ func _play_intro(player: PlayerController) -> void:
 	var close_look := player.global_position + Vector3(0, 0.8, 0)
 	await _intro_move(Vector3(12, 4, 0), close_pos, Vector3(54, 5, 35), close_look, 2.0)
 
-	_dialogue.show_text("Matsubara kun", "I don't know where anything is! Will you help me?")
+	_dialogue.show_text("Matsubara kun", "どこに何があるんか、ぜんぜんわからへん！助けてくれへん？")
 	await _cine_wait(3.0)   # buttons appear after 3 s OR immediately on skip
 
 	var idx: int = await _dialogue.show_options("Matsubara kun",
-			"I don't know where anything is! Will you help me?",
-			["Help him", "Don't help him"])
+			"どこに何があるんか、ぜんぜんわからへん！助けてくれへん？",
+			["助ける", "断る"])
 
 	if idx != 0:
-		_dialogue.show_text("Matsubara kun", "Please?")
+		_dialogue.show_text("Matsubara kun", "頼むわ〜！")
 		await _cine_wait(2.0)
 		idx = await _dialogue.show_options(
-				"Matsubara kun", "Please?", ["Help him", "Don't help him"])
+				"Matsubara kun", "頼むわ〜！", ["助ける", "断る"])
 		if idx != 0:
-			_dialogue.show_text("Matsubara kun", "Oh that's too bad. Bye.")
+			_dialogue.show_text("Matsubara kun", "そっか〜、残念やわ。ほな、さいなら！")
 			await _cine_wait(3.0)
 			_dialogue.hide_dialogue()
 			_fade_out_intro_title()
@@ -374,7 +374,7 @@ func _play_intro(player: PlayerController) -> void:
 			return
 
 	# 7) Matsubara thanks the player.
-	_dialogue.show_text("Matsubara kun", "Thank you! Maybe I should ask somebody for directions.")
+	_dialogue.show_text("Matsubara kun", "おおきに！誰かに道きいたらええな。")
 	await _cine_wait(3.5)
 	_dialogue.hide_dialogue()
 

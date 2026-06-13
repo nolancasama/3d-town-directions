@@ -1,4 +1,4 @@
-class_name DialogueManager
+﻿class_name DialogueManager
 extends CanvasLayer
 # =============================================================================
 # DialogueManager.gd
@@ -215,7 +215,7 @@ func mark_discovered(name: String, time_str: String) -> void:
 	var lbl := Label.new()
 	lbl.add_theme_font_size_override("font_size", 17)
 	lbl.add_theme_color_override("font_color", Color(0.85, 1.0, 0.85))
-	lbl.text = "✓ %s  %s" % [name, time_str]
+	lbl.text = "* %s  %s" % [name, time_str]
 	_disc_list.add_child(lbl)
 
 
