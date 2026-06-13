@@ -288,11 +288,9 @@ func _play_intro(player: PlayerController) -> void:
 			player.stop_walk()
 			player.global_position = player_start
 			break
-	# Kill the orbit and snap to its end position so the camera is free for section 2.
-	if _orbit_tween != null:
-		_orbit_tween.kill()
-		_orbit_tween = null
-		_apply_intro_orbit(_orbit_a1)
+	# Let the orbit run to its natural end (bus parallel to screen bottom).
+	while _orbit_tween != null:
+		await get_tree().process_frame
 	player.rotation.y = PI  # face south — toward the camera for his introduction
 
 	# 2) Hard cut to side bus shot.
