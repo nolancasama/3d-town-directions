@@ -875,16 +875,38 @@ func _spawn_npcs(dialogue: DialogueManager, camera_focus: CameraFocusManager,
 				continue   # the Park itself; covered by the spawn greeter below
 			var npos: Vector3
 			var p: PackedVector3Array
+			# 0 = front centered, 1 = front offset, 2 = back sidewalk
+			var variant: int = k % 3
+			# Alternate offset direction so NPCs spread across both ends of a street.
+			var off_sign: float = 1.0 if (i + j) % 2 == 0 else -1.0
 			if absf(cx) >= absf(cz):
-				# Frontage faces a N-S street: stand on its sidewalk, patrol along z.
-				var sx: float = cx - signf(cx) * (HALF_BLOCK - SW_OFF)
-				npos = Vector3(sx, 0, cz)
-				p = PackedVector3Array([Vector3(sx, 0, cz - 12), Vector3(sx, 0, cz + 12)])
+				var sx_f: float = cx - signf(cx) * (HALF_BLOCK - SW_OFF)  # front
+				var sx_b: float = cx + signf(cx) * (HALF_BLOCK - SW_OFF)  # back
+				match variant:
+					0:  # front sidewalk, centered on block
+						npos = Vector3(sx_f, 0, cz)
+						p = PackedVector3Array([Vector3(sx_f, 0, cz - 12), Vector3(sx_f, 0, cz + 12)])
+					1:  # front sidewalk, further along the street
+						var oz: float = off_sign * 15.0
+						npos = Vector3(sx_f, 0, cz + oz)
+						p = PackedVector3Array([Vector3(sx_f, 0, cz + oz - 9), Vector3(sx_f, 0, cz + oz + 9)])
+					_:  # back sidewalk (opposite face of the block)
+						npos = Vector3(sx_b, 0, cz)
+						p = PackedVector3Array([Vector3(sx_b, 0, cz - 12), Vector3(sx_b, 0, cz + 12)])
 			else:
-				# Frontage faces an E-W street: stand on its sidewalk, patrol along x.
-				var sz: float = cz - signf(cz) * (HALF_BLOCK - SW_OFF)
-				npos = Vector3(cx, 0, sz)
-				p = PackedVector3Array([Vector3(cx - 12, 0, sz), Vector3(cx + 12, 0, sz)])
+				var sz_f: float = cz - signf(cz) * (HALF_BLOCK - SW_OFF)
+				var sz_b: float = cz + signf(cz) * (HALF_BLOCK - SW_OFF)
+				match variant:
+					0:
+						npos = Vector3(cx, 0, sz_f)
+						p = PackedVector3Array([Vector3(cx - 12, 0, sz_f), Vector3(cx + 12, 0, sz_f)])
+					1:
+						var ox: float = off_sign * 15.0
+						npos = Vector3(cx + ox, 0, sz_f)
+						p = PackedVector3Array([Vector3(cx + ox - 9, 0, sz_f), Vector3(cx + ox + 9, 0, sz_f)])
+					_:
+						npos = Vector3(cx, 0, sz_b)
+						p = PackedVector3Array([Vector3(cx - 12, 0, sz_b), Vector3(cx + 12, 0, sz_b)])
 			_make_npc(npos, p, palette[k % palette.size()],
 					dialogue, camera_focus, player, goal, goals, goal_names, speech)
 			k += 1
