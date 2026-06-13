@@ -152,13 +152,19 @@ func _celebrate(dest_name: String, node: Node3D, spot: Vector3) -> void:
 		_audio.play()
 	_add_name_label(dest_name, node)
 	_dialogue.show_center_message("You found the %s!" % dest_name)
+	# Burst confetti at the roofline so it's visible when the camera tilts up.
+	var confetti_pos: Vector3
+	if node != null and node.has_meta("label_pos"):
+		confetti_pos = node.get_meta("label_pos") as Vector3
+	else:
+		confetti_pos = spot + Vector3(0, 8.0, 0)
 	if _camera_focus != null and _player != null:
 		if _player.has_method("set_input_enabled"):
 			_player.call("set_input_enabled", false)
 		await _camera_focus.pan_to(node, _player.global_position)
 		await _camera_focus.pan_to_roof(node)
 		# Camera is now tilted up at the building — fire confetti and reveal sign.
-		_spawn_confetti(spot)
+		_spawn_confetti(confetti_pos)
 		if _icons.has(dest_name):
 			_icons[dest_name].visible = true
 		await get_tree().create_timer(2.0).timeout
@@ -166,7 +172,7 @@ func _celebrate(dest_name: String, node: Node3D, spot: Vector3) -> void:
 		if _player.has_method("set_input_enabled"):
 			_player.call("set_input_enabled", true)
 	else:
-		_spawn_confetti(spot)
+		_spawn_confetti(confetti_pos)
 		if _icons.has(dest_name):
 			_icons[dest_name].visible = true
 
