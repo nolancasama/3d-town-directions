@@ -1653,23 +1653,24 @@ func _facing(pos: Vector3) -> float:
 	return 0.0 if nz > pos.z else PI
 
 
-# Buildings in the row directly fronting the central Park face the Park (so the
-# green has a consistent storefront) instead of being turned toward a side street
-# by the nearest-street tie-break. Everything else just faces its street.
-const PARK_LAT := 20.0   # Park half-width: how far a frontage can sit off-axis
+# Buildings in the four blocks directly adjacent to the central Park always face
+# either the Park (near half) or the opposite outer road (far half). This prevents
+# side-road tie-breaks from rotating buildings to face each other's back walls.
 func _park_or_street_facing(pos: Vector3) -> float:
-	# South / north blocks (Park lies along the z axis from them).
-	if absf(pos.x) <= PARK_LAT:
-		if pos.z > HALF_BLOCK and pos.z < 54.0:
-			return PI            # south block -> face north toward the Park
-		if pos.z < -HALF_BLOCK and pos.z > -54.0:
-			return 0.0           # north block -> face south toward the Park
-	# East / west blocks (Park lies along the x axis from them).
-	if absf(pos.z) <= PARK_LAT:
-		if pos.x > HALF_BLOCK and pos.x < 54.0:
-			return -PI * 0.5     # east block -> face west toward the Park
-		if pos.x < -HALF_BLOCK and pos.x > -54.0:
-			return PI * 0.5      # west block -> face east toward the Park
+	var HB2 := HALF_BLOCK * 2.0   # 54 — block centre distance from park road
+	var HB3 := HALF_BLOCK * 3.0   # 81 — outer road of each park-adjacent block
+	# South block (|x|<27, 27<z<81): face north toward Park OR south toward outer road.
+	if absf(pos.x) < HALF_BLOCK and pos.z > HALF_BLOCK and pos.z < HB3:
+		return PI if pos.z < HB2 else 0.0
+	# North block (|x|<27, -81<z<-27): face south toward Park OR north toward outer road.
+	if absf(pos.x) < HALF_BLOCK and pos.z < -HALF_BLOCK and pos.z > -HB3:
+		return 0.0 if pos.z > -HB2 else PI
+	# East block (|z|<27, 27<x<81): face west toward Park OR east toward outer road.
+	if absf(pos.z) < HALF_BLOCK and pos.x > HALF_BLOCK and pos.x < HB3:
+		return -PI * 0.5 if pos.x < HB2 else PI * 0.5
+	# West block (|z|<27, -81<x<-27): face east toward Park OR west toward outer road.
+	if absf(pos.z) < HALF_BLOCK and pos.x < -HALF_BLOCK and pos.x > -HB3:
+		return PI * 0.5 if pos.x > -HB2 else -PI * 0.5
 	return _facing(pos)
 
 
