@@ -24,7 +24,7 @@ var _disc_count: Label
 var _disc_list: VBoxContainer
 var _disc_total: int = 0
 
-var _jp_font: FontFile = null
+var _jp_font: Font = null
 
 # Elapsed timer (top-centre while goal active)
 var _elapsed_label: Label
@@ -45,7 +45,11 @@ func _ready() -> void:
 
 
 func _build_ui() -> void:
-	_jp_font = load("res://assets/fonts/NotoSansJP.ttf") as FontFile
+	var _jp_base := load("res://assets/fonts/NotoSansJP.ttf") as FontFile
+	var _jp_var := FontVariation.new()
+	_jp_var.base_font = _jp_base
+	_jp_var.variation_opentype = {"wght": 700}
+	_jp_font = _jp_var
 	# --- Discovery panel (top-left) ------------------------------------------
 	_disc_panel = PanelContainer.new()
 	_disc_panel.position = Vector2(14, 14)
