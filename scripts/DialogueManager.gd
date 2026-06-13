@@ -24,6 +24,8 @@ var _disc_count: Label
 var _disc_list: VBoxContainer
 var _disc_total: int = 0
 
+var _jp_font: FontFile = null
+
 # Elapsed timer (top-centre while goal active)
 var _elapsed_label: Label
 
@@ -43,6 +45,7 @@ func _ready() -> void:
 
 
 func _build_ui() -> void:
+	_jp_font = load("res://assets/fonts/NotoSansJP.ttf") as FontFile
 	# --- Discovery panel (top-left) ------------------------------------------
 	_disc_panel = PanelContainer.new()
 	_disc_panel.position = Vector2(14, 14)
@@ -61,7 +64,9 @@ func _build_ui() -> void:
 	_disc_count = Label.new()
 	_disc_count.add_theme_font_size_override("font_size", 22)
 	_disc_count.add_theme_color_override("font_color", Color(1.0, 0.90, 0.4))
-	_disc_count.text = "0 / 0 Places Found"
+	_disc_count.text = "0 / 0 か所発見"
+	if _jp_font:
+		_disc_count.add_theme_font_override("font", _jp_font)
 	dv.add_child(_disc_count)
 
 	# Scroll container caps the list at ~7 visible rows; extra entries scroll.
@@ -152,11 +157,15 @@ func _build_ui() -> void:
 	_speaker_label = Label.new()
 	_speaker_label.add_theme_font_size_override("font_size", 22)
 	_speaker_label.add_theme_color_override("font_color", Color(1, 0.85, 0.4))
+	if _jp_font:
+		_speaker_label.add_theme_font_override("font", _jp_font)
 	vbox.add_child(_speaker_label)
 
 	_text_label = Label.new()
 	_text_label.add_theme_font_size_override("font_size", 26)
 	_text_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	if _jp_font:
+		_text_label.add_theme_font_override("font", _jp_font)
 	vbox.add_child(_text_label)
 
 	_options_scroll = ScrollContainer.new()
@@ -201,7 +210,7 @@ func _on_text_input_submitted(txt: String) -> void:
 # -----------------------------------------------------------------------------
 func init_discovery(total: int) -> void:
 	_disc_total = total
-	_disc_count.text = "0 / %d Places Found" % total
+	_disc_count.text = "0 / %d か所発見" % total
 	_disc_panel.visible = false
 
 
@@ -211,7 +220,7 @@ func show_discovery_panel() -> void:
 
 func mark_discovered(name: String, time_str: String) -> void:
 	var found := _disc_list.get_child_count() + 1
-	_disc_count.text = "%d / %d Places Found" % [found, _disc_total]
+	_disc_count.text = "%d / %d か所発見" % [found, _disc_total]
 	var lbl := Label.new()
 	lbl.add_theme_font_size_override("font_size", 17)
 	lbl.add_theme_color_override("font_color", Color(0.85, 1.0, 0.85))
@@ -270,6 +279,8 @@ func show_options(speaker: String, prompt: String, options: Array) -> int:
 		button.text = str(options[i])
 		button.add_theme_font_size_override("font_size", 20)
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		if _jp_font:
+			button.add_theme_font_override("font", _jp_font)
 		button.pressed.connect(_on_option_pressed.bind(i))
 		_options_grid.add_child(button)
 		if first == null:
