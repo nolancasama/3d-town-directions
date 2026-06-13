@@ -48,7 +48,7 @@ func _build_ui() -> void:
 	var _jp_base := load("res://assets/fonts/NotoSansJP.ttf") as FontFile
 	var _jp_var := FontVariation.new()
 	_jp_var.base_font = _jp_base
-	_jp_var.variation_opentype = {"wght": 700}
+	_jp_var.variation_embolden = 0.8   # synthetic bold; works regardless of font axes
 	_jp_font = _jp_var
 	# --- Discovery panel (top-left) ------------------------------------------
 	_disc_panel = PanelContainer.new()
@@ -161,8 +161,6 @@ func _build_ui() -> void:
 	_speaker_label = Label.new()
 	_speaker_label.add_theme_font_size_override("font_size", 22)
 	_speaker_label.add_theme_color_override("font_color", Color(1, 0.85, 0.4))
-	if _jp_font:
-		_speaker_label.add_theme_font_override("font", _jp_font)
 	vbox.add_child(_speaker_label)
 
 	_text_label = Label.new()
