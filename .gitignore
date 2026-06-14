@@ -10,3 +10,6 @@ export_presets.cfg
 
 # Build output
 build/
+
+# Piper voice models (local only — used to regenerate assets/voice/)
+tools/piper_models/
