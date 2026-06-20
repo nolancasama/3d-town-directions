@@ -18,6 +18,7 @@ var _target: Node3D = null
 var _target_name: String = ""
 var _goal_spot: Vector3 = Vector3.ZERO
 var _target_reach: float = 4.0
+var _goal_zone_z_min: float = -1e9   # if set, triggers when player z >= this value
 var _street_axis_x: bool = false
 var _street_line: float = 0.0
 var _seg_half: float = 24.0
@@ -58,6 +59,7 @@ func set_target(dest_name: String, target: Node3D) -> void:
 	_target_name = dest_name
 	_goal_spot = target.get_meta("goal_spot", target.global_position)
 	_target_reach = target.get_meta("goal_reach", 4.0)
+	_goal_zone_z_min = target.get_meta("goal_zone_z_min", -1e9)
 	_street_axis_x = target.get_meta("goal_street_axis_x", false)
 	_street_line = target.get_meta("goal_street_line", 0.0)
 	_seg_half = target.get_meta("goal_seg_half", 24.0)
@@ -95,7 +97,8 @@ func _process(delta: float) -> void:
 	a.y = 0
 	var dist := a.distance_to(Vector3(_goal_spot.x, 0, _goal_spot.z))
 
-	if dist <= _target_reach:
+	var reached := (_goal_zone_z_min > -1e9 and a.z >= _goal_zone_z_min) or dist <= _target_reach
+	if reached:
 		_on_reached()
 		return
 
@@ -132,7 +135,8 @@ func _on_reached() -> void:
 	_dialogue.clear_directions()
 
 	if _revisit or _named.has(dest_name):
-		_dialogue.show_center_message("You've already found the %s!" % dest_name)
+		var art2 := "" if dest_name.contains("'s") else "the "
+		_dialogue.show_center_message("You've already found %s%s!" % [art2, dest_name])
 		_revisit = false
 		return
 
@@ -151,7 +155,6 @@ func _celebrate(dest_name: String, node: Node3D, spot: Vector3) -> void:
 		_audio.stream = _chime
 		_audio.play()
 	_add_name_label(dest_name, node)
-	_dialogue.show_center_message("You found the %s!" % dest_name)
 	# Burst confetti at the roofline so it's visible when the camera tilts up.
 	var confetti_pos: Vector3
 	if node != null and node.has_meta("label_pos"):
