@@ -46,27 +46,34 @@ func _setup_audio() -> void:
 
 
 func _make_rumble() -> AudioStreamWAV:
-	# Fundamental: 49 Hz (period = 225 samples at 11025 Hz).
-	# Chug LFO:    7 Hz  (period = 1575 samples).
-	# LCM(225, 1575) = 1575 — both complete whole cycles at the loop point.
-	var rate        := 11025
-	var fund_period := 225
-	var fund        := float(rate) / float(fund_period)   # 49.0 Hz
-	var lfo_period  := 1575
-	var lfo_freq    := float(rate) / float(lfo_period)    # 7.0 Hz
-	var n           := lfo_period
+	# Matches the Web Audio version: 50 Hz base oscillator with a square-wave
+	# LFO at 7.5 Hz modulating the FREQUENCY by ±22 Hz (FM, not AM).
+	# Loop = 3 LFO cycles (4410 samples). Over that span the oscillator
+	# completes exactly 20 cycles (integral of inst_freq = 20), so both the
+	# main phase and all integer/half-integer harmonics return to their
+	# starting value — no click at the loop point.
+	var rate      := 11025
+	var n         := 4410            # 3 × (11025 / 7.5) = 3 × 1470
+	var base_freq := 50.0
+	var lfo_freq  := 7.5
+	var lfo_depth := 22.0            # Hz deviation (same as Web Audio gainNode)
 
 	var data := PackedByteArray()
 	data.resize(n * 2)
+
+	var phase := 0.0
 	for s in n:
-		var t   := float(s) / float(rate)
-		var lfo := 0.55 + 0.45 * sin(TAU * lfo_freq * t)
-		var v   := sin(TAU * fund       * t) * 0.30
-		v       += sin(TAU * fund * 2.0 * t) * 0.15
-		v       += sin(TAU * fund * 3.0 * t) * 0.08
-		v       += sin(TAU * fund * 0.5 * t) * 0.10
-		v       *= lfo
-		var iv  := int(clampf(v, -1.0, 1.0) * 32767.0)
+		var t         := float(s) / float(rate)
+		var lfo       := 1.0 if fmod(t * lfo_freq, 1.0) < 0.5 else -1.0
+		var inst_freq := base_freq + lfo_depth * lfo
+		phase         += TAU * inst_freq / float(rate)
+
+		var v  := sin(phase)       * 0.26   # fundamental (FM-modulated)
+		v      += sin(phase * 2.0) * 0.11   # 2nd harmonic
+		v      += sin(phase * 3.0) * 0.07   # 3rd harmonic
+		v      += sin(phase * 0.5) * 0.10   # sub-harmonic (~25 Hz)
+
+		var iv := int(clampf(v, -1.0, 1.0) * 32767.0)
 		data[s * 2]     = iv & 0xFF
 		data[s * 2 + 1] = (iv >> 8) & 0xFF
 
