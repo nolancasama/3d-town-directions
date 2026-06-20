@@ -15,6 +15,7 @@ const TRACK_Z    := -150.0
 var _mats: Dictionary = {}
 var _whistled_a  := false   # approaching platform whistle (~x = +80)
 var _whistled_b  := false   # departing whistle            (~x = -20)
+var _is_commuter := false
 var _rumble:  AudioStreamPlayer3D
 var _whistle: AudioStreamPlayer3D
 
@@ -30,7 +31,7 @@ func _ready() -> void:
 # ---------------------------------------------------------------------------
 func _setup_audio() -> void:
 	_rumble = AudioStreamPlayer3D.new()
-	_rumble.stream       = _make_rumble()
+	_rumble.stream       = _make_commuter_rumble() if _is_commuter else _make_rumble()
 	_rumble.unit_size    = 22.0
 	_rumble.max_distance = 150.0
 	_rumble.volume_db    = 2.0
@@ -72,6 +73,52 @@ func _make_rumble() -> AudioStreamWAV:
 		v      += sin(phase * 2.0) * 0.11   # 2nd harmonic
 		v      += sin(phase * 3.0) * 0.07   # 3rd harmonic
 		v      += sin(phase * 0.5) * 0.10   # sub-harmonic (~25 Hz)
+
+		var iv := int(clampf(v, -1.0, 1.0) * 32767.0)
+		data[s * 2]     = iv & 0xFF
+		data[s * 2 + 1] = (iv >> 8) & 0xFF
+
+	var wav := AudioStreamWAV.new()
+	wav.format     = AudioStreamWAV.FORMAT_16_BITS
+	wav.mix_rate   = rate
+	wav.stereo     = false
+	wav.data       = data
+	wav.loop_mode  = AudioStreamWAV.LOOP_FORWARD
+	wav.loop_begin = 0
+	wav.loop_end   = n - 1
+	return wav
+
+
+func _make_commuter_rumble() -> AudioStreamWAV:
+	# Electric motor: 180 Hz base, ±6 Hz FM (much gentler than diesel's ±22 Hz).
+	# Square LFO at 7.5 Hz — same rate but smaller swing gives a steady machine
+	# hum rather than a lurching chug. A separate 750 Hz tone adds the inverter
+	# whine characteristic of traction motors.
+	# Loop = 2 LFO cycles (2940 samples). Motor completes 48 exact cycles;
+	# inverter completes 200 exact cycles — both seamless.
+	var rate      := 11025
+	var n         := 2940
+	var base_freq := 180.0
+	var lfo_freq  := 7.5
+	var lfo_depth := 6.0
+
+	var data := PackedByteArray()
+	data.resize(n * 2)
+	var phase     := 0.0
+	var inv_phase := 0.0
+	for s in n:
+		var t         := float(s) / float(rate)
+		var lfo       := 1.0 if fmod(t * lfo_freq, 1.0) < 0.5 else -1.0
+		var inst_freq := base_freq + lfo_depth * lfo
+		phase         += TAU * inst_freq / float(rate)
+		inv_phase     += TAU * 750.0    / float(rate)
+
+		var v  := sin(phase)       * 0.18   # 180 Hz motor fundamental
+		v      += sin(phase * 2.0) * 0.14   # 360 Hz — strong 2nd harmonic
+		v      += sin(phase * 3.0) * 0.09   # 540 Hz
+		v      += sin(phase * 4.0) * 0.05   # 720 Hz — electric brightness
+		v      += sin(phase * 0.5) * 0.04   # 90 Hz sub — lighter than diesel
+		v      += sin(inv_phase)   * 0.05   # 750 Hz inverter whine
 
 		var iv := int(clampf(v, -1.0, 1.0) * 32767.0)
 		data[s * 2]     = iv & 0xFF
@@ -158,6 +205,7 @@ func _build_classic() -> void:
 
 
 func _build_commuter() -> void:
+	_is_commuter = true
 	_loco_commuter()
 	var stripe := Color(0.08, 0.32, 0.72)
 	_car_commuter(stripe, 11.0, true)
