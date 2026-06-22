@@ -1,4 +1,4 @@
-extends Node3D
+﻿extends Node3D
 # =============================================================================
 # Main.gd  -  Bootstrap / TownBuilder
 # -----------------------------------------------------------------------------
@@ -221,7 +221,7 @@ func _ready() -> void:
 	goals["Train Station"] = ts_anchor
 	goal_names.append("Train Station")
 
-	# Beach goal — ring appears on the sand.
+	# Beach goal â€” ring appears on the sand.
 	var beach_anchor := Node3D.new()
 	beach_anchor.name = "BeachAnchor"
 	beach_anchor.position = Vector3(0, 0, 162)
@@ -236,7 +236,7 @@ func _ready() -> void:
 	goals["Beach"] = beach_anchor
 	goal_names.append("Beach")
 
-	# Shopping Mall goal — ring appears in front of the west entrance (facing the sidewalk).
+	# Shopping Mall goal â€” ring appears in front of the west entrance (facing the sidewalk).
 	var mall_anchor := Node3D.new()
 	mall_anchor.name = "MallAnchor"
 	mall_anchor.position = Vector3(162, 0, -27)
@@ -336,7 +336,7 @@ func _play_intro(player: PlayerController) -> void:
 	_bgm_player.volume_db = -10.0
 	_bgm_player.play()
 
-	# 1) High-angle orbit — continuous half-turn over 11 s.
+	# 1) High-angle orbit â€” continuous half-turn over 11 s.
 	_intro_orbit(focus, 14.0, 26.0, -PI * 0.5, PI * 0.5, 11.0)
 	# At the midpoint the player steps off the bus and walks to their start position.
 	await _cine_wait(5.5)
@@ -356,7 +356,7 @@ func _play_intro(player: PlayerController) -> void:
 	# Let the orbit run to its natural end (bus parallel to screen bottom).
 	while _orbit_tween != null:
 		await get_tree().process_frame
-	player.rotation.y = PI  # face south — toward the camera for his introduction
+	player.rotation.y = PI  # face south â€” toward the camera for his introduction
 
 	# 2) Hard cut to side bus shot.
 	_intro_cam.position = Vector3(0, 2.0, 32)
@@ -395,15 +395,15 @@ func _play_intro(player: PlayerController) -> void:
 	engine.queue_free()
 	bus.queue_free()
 
-	# 4) Push-in to the player's face — Matsubara introduces himself.
+	# 4) Push-in to the player's face â€” Matsubara introduces himself.
 	var face_pos := Vector3(0, 2.5, 24)
-	_dialogue.show_text("Matsubara kun", "やあ！ぼく松原くんやで！アメリカ来るの初めてやねん！")
+	_dialogue.show_text("Matsubara kun", "ã‚„ã‚ï¼ã¼ãæ¾åŽŸãã‚“ã‚„ã§ï¼ã‚¢ãƒ¡ãƒªã‚«æ¥ã‚‹ã®åˆã‚ã¦ã‚„ã­ã‚“ï¼")
 	await _intro_move(Vector3(0, 2.0, 32), face_pos, Vector3(0, 1.5, 23.75), focus, 5.0)
 	await _cine_wait(1.0)
 
 	# 5) Town pan shots.
 	player.rotation.y = PI
-	_dialogue.show_text("Matsubara kun", "わあ！めっちゃ広いなあ、アメリカ！")
+	_dialogue.show_text("Matsubara kun", "ã‚ã‚ï¼ã‚ã£ã¡ã‚ƒåºƒã„ãªã‚ã€ã‚¢ãƒ¡ãƒªã‚«ï¼")
 	await _intro_move(Vector3(0, 4, -12), Vector3(0, 4, -12),
 			Vector3(-35, 5, -54), Vector3(35, 5, -54), 3.8)
 	await _intro_move(Vector3(12, 4, 0), Vector3(12, 4, 0),
@@ -414,20 +414,20 @@ func _play_intro(player: PlayerController) -> void:
 	var close_look := player.global_position + Vector3(0, 0.8, 0)
 	await _intro_move(Vector3(12, 4, 0), close_pos, Vector3(54, 5, 35), close_look, 2.0)
 
-	_dialogue.show_text("Matsubara kun", "どこに何があるんか、ぜんぜんわからへん！助けてくれへん？")
+	_dialogue.show_text("Matsubara kun", "ã©ã“ã«ä½•ãŒã‚ã‚‹ã‚“ã‹ã€ãœã‚“ãœã‚“ã‚ã‹ã‚‰ã¸ã‚“ï¼åŠ©ã‘ã¦ãã‚Œã¸ã‚“ï¼Ÿ")
 	await _cine_wait(3.0)   # buttons appear after 3 s OR immediately on skip
 
 	var idx: int = await _dialogue.show_options("Matsubara kun",
-			"どこに何があるんか、ぜんぜんわからへん！助けてくれへん？",
-			["助ける", "断る"])
+			"ã©ã“ã«ä½•ãŒã‚ã‚‹ã‚“ã‹ã€ãœã‚“ãœã‚“ã‚ã‹ã‚‰ã¸ã‚“ï¼åŠ©ã‘ã¦ãã‚Œã¸ã‚“ï¼Ÿ",
+			["åŠ©ã‘ã‚‹", "æ–­ã‚‹"])
 
 	if idx != 0:
-		_dialogue.show_text("Matsubara kun", "頼むわ〜！")
+		_dialogue.show_text("Matsubara kun", "é ¼ã‚€ã‚ã€œï¼")
 		await _cine_wait(2.0)
 		idx = await _dialogue.show_options(
-				"Matsubara kun", "頼むわ〜！", ["助ける", "断る"])
+				"Matsubara kun", "é ¼ã‚€ã‚ã€œï¼", ["åŠ©ã‘ã‚‹", "æ–­ã‚‹"])
 		if idx != 0:
-			_dialogue.show_text("Matsubara kun", "そっか〜、残念やわ。ほな、さいなら！")
+			_dialogue.show_text("Matsubara kun", "ãã£ã‹ã€œã€æ®‹å¿µã‚„ã‚ã€‚ã»ãªã€ã•ã„ãªã‚‰ï¼")
 			await _cine_wait(3.0)
 			_dialogue.hide_dialogue()
 			_fade_out_intro_title()
@@ -439,7 +439,7 @@ func _play_intro(player: PlayerController) -> void:
 			return
 
 	# 7) Matsubara thanks the player.
-	_dialogue.show_text("Matsubara kun", "おおきに！誰かに道きいたらええな。")
+	_dialogue.show_text("Matsubara kun", "ãŠãŠãã«ï¼èª°ã‹ã«é“ãã„ãŸã‚‰ãˆãˆãªã€‚")
 	await _cine_wait(3.5)
 	_dialogue.hide_dialogue()
 
@@ -698,19 +698,19 @@ func _make_bgm() -> AudioStreamWAV:
 	var rate := 11025
 	var beat := 0.25   # eighth note at 120 BPM
 
-	# [frequency_hz, eighth_note_count]  — 0.0 = rest
+	# [frequency_hz, eighth_note_count]  â€” 0.0 = rest
 	# Four 16-beat phrases = 64 eighth notes = 16 s at 120 BPM before looping.
 	var seq: Array = [
-		# Phrase A — bright opening
+		# Phrase A â€” bright opening
 		[659.25, 1], [783.99, 1], [880.00, 2], [783.99, 1], [659.25, 1], [523.25, 2],
 		[587.33, 1], [659.25, 1], [783.99, 2], [659.25, 2], [0.0, 2],
-		# Phrase B — stepwise climb and fall
+		# Phrase B â€” stepwise climb and fall
 		[523.25, 1], [587.33, 1], [659.25, 1], [698.46, 1], [783.99, 4],
 		[698.46, 1], [659.25, 1], [587.33, 1], [523.25, 1], [659.25, 2], [0.0, 2],
-		# Phrase C — soar into upper register
+		# Phrase C â€” soar into upper register
 		[659.25, 1], [783.99, 1], [880.00, 1], [987.77, 1], [1046.50, 2], [880.00, 2],
 		[783.99, 1], [880.00, 1], [783.99, 1], [698.46, 1], [659.25, 2], [523.25, 2],
-		# Phrase D — triumphant finish, land on long tonic
+		# Phrase D â€” triumphant finish, land on long tonic
 		[523.25, 1], [659.25, 1], [783.99, 1], [880.00, 1], [987.77, 2], [1046.50, 2],
 		[880.00, 1], [783.99, 1], [698.46, 1], [659.25, 1], [523.25, 4],
 	]
@@ -756,8 +756,8 @@ func _make_bgm() -> AudioStreamWAV:
 	return wav
 
 
-# Low-frequency engine idle loop. Period = 150 samples at 11025 Hz → 73.5 Hz
-# fundamental. All harmonics used (×0.5, ×1, ×2, ×3) divide evenly into the
+# Low-frequency engine idle loop. Period = 150 samples at 11025 Hz â†’ 73.5 Hz
+# fundamental. All harmonics used (Ã—0.5, Ã—1, Ã—2, Ã—3) divide evenly into the
 # 1500-sample loop so there is no click at the loop point.
 func _make_engine_sound() -> AudioStreamWAV:
 	var rate    := 11025
@@ -849,7 +849,7 @@ func _build_intro_bus() -> Node3D:
 	var black  := Color(0.12, 0.12, 0.14)
 	var chrome := Color(0.80, 0.80, 0.82)
 
-	# == Structural frame (no solid south or north wall — park visible through) ==
+	# == Structural frame (no solid south or north wall â€” park visible through) ==
 	# Roof slab
 	_box(b, Vector3(8.0, 0.22, 2.5), Vector3(0, 2.62, 0), dark_g)
 	# Roof-mounted AC unit
@@ -863,7 +863,7 @@ func _build_intro_bus() -> Node3D:
 	_box(b, Vector3(0.32, 2.44, 2.5), Vector3(-4.16, 1.58, 0), green)
 
 	# == South face: lower body strip (tall), three pillars, small windows, header ==
-	# Windows: 1.0 × 0.80, centre y=1.75  →  bottom y=1.35, top y=2.15
+	# Windows: 1.0 Ã— 0.80, centre y=1.75  â†’  bottom y=1.35, top y=2.15
 	# Lower strip: floor top (y=0.72) to window bottom (y=1.35), h=0.63, cy=1.035
 	_box(b, Vector3(7.4, 0.63, 0.14), Vector3(0, 1.035, 1.26), green)
 	# Upper header: window top (y=2.15) to roof bottom (y=2.51), h=0.36, cy=2.33
@@ -871,7 +871,7 @@ func _build_intro_bus() -> Node3D:
 	# Three vertical A-pillars (match window height)
 	for px in [-2.0, 0.0, 2.0]:
 		_box(b, Vector3(0.18, 0.80, 0.14), Vector3(px, 1.75, 1.27), black)
-	# Four small window panes — semi-transparent so park and player show through
+	# Four small window panes â€” semi-transparent so park and player show through
 	var win_mat := StandardMaterial3D.new()
 	win_mat.albedo_color = Color(0.38, 0.58, 0.82, 0.22)
 	win_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
@@ -900,7 +900,7 @@ func _build_intro_bus() -> Node3D:
 		var w := _cylinder(b, 0.44, 0.32, wv, black)
 		w.rotation.x = PI * 0.5
 
-	# == Passengers — one per window, seated, visible through south glass ==
+	# == Passengers â€” one per window, seated, visible through south glass ==
 	var shirts := [Color(0.20, 0.25, 0.62), Color(0.70, 0.28, 0.22),
 				   Color(0.26, 0.58, 0.30), Color(0.58, 0.34, 0.64)]
 	var skins  := [Color(0.90, 0.75, 0.60), Color(0.55, 0.42, 0.32),
@@ -929,7 +929,7 @@ func _spawn_npcs(dialogue: DialogueManager, camera_focus: CameraFocusManager,
 	]
 	var k := 0
 	var nolan_k := 7   # which inner-town NPC is named Nolan
-	# 3 families × 3 subtle pitches = 9 distinct voices. Range kept narrow (0.93-1.07)
+	# 3 families Ã— 3 subtle pitches = 9 distinct voices. Range kept narrow (0.93-1.07)
 	# so all voices remain fully intelligible. "piper" falls back to assets/voice/*.wav.
 	var voice_combos: Array = [
 		["female", 0.93], ["female", 1.00], ["female", 1.07],
@@ -1009,7 +1009,7 @@ func _spawn_npcs(dialogue: DialogueManager, camera_focus: CameraFocusManager,
 			"Townsperson", _pvc[1], 0.88, k, _pvc[0], _pf, _ph)
 	k += 1
 	# South outer sidewalk: patrol in the gap between the two center beach benches
-	# (benches at x=-20 and x=20 — NPC bypasses collision, so keep x in [-14, 14]).
+	# (benches at x=-20 and x=20 â€” NPC bypasses collision, so keep x in [-14, 14]).
 	var _sr := RandomNumberGenerator.new(); _sr.seed = k + 4999
 	var _sf: bool = _sr.randi() % 2 == 0
 	var _sh: float = ([0.88, 1.0, 1.12] as Array)[_sr.randi() % 3]
@@ -1075,7 +1075,7 @@ func _make_npc(pos: Vector3, p: PackedVector3Array, c: Array,
 # a DIFFERENT goal building chosen to be as far as possible from the real place.
 # -----------------------------------------------------------------------------
 func _spawn_posters(goals: Dictionary, player: PlayerController, layout: Array, goal: GoalManager) -> void:
-	# Where the NPCs stand / patrol — posters should be kept clear of these so
+	# Where the NPCs stand / patrol â€” posters should be kept clear of these so
 	# reading an ad never clashes with talking to a townsperson.
 	var npc_points: Array = []
 	for child in get_children():
@@ -1103,7 +1103,7 @@ func _spawn_posters(goals: Dictionary, player: PlayerController, layout: Array, 
 		var fp := _footprint({"pos": node.global_position, "size": size})
 
 		# Mount on a SIDE wall (perpendicular to the door/front), and of the two
-		# sides choose the one facing the most open space — i.e. the cross-street,
+		# sides choose the one facing the most open space â€” i.e. the cross-street,
 		# not the narrow alley between buildings.
 		var sx: Vector3 = node.global_transform.basis.x
 		sx.y = 0.0
@@ -1158,7 +1158,7 @@ func _spawn_posters(goals: Dictionary, player: PlayerController, layout: Array, 
 		})
 
 	# Corner filler buildings: those within ~16 units of a road line in BOTH
-	# axes (the ±SLOT diagonal ring slots). Mid-block ring buildings are ~27
+	# axes (the Â±SLOT diagonal ring slots). Mid-block ring buildings are ~27
 	# units from the road in one axis and won't pass both checks.
 	const CORNER_THRESH := 16.0
 	for cfg in layout:
@@ -1178,8 +1178,8 @@ func _spawn_posters(goals: Dictionary, player: PlayerController, layout: Array, 
 			binter = binter.normalized()
 		var cbest_wall: Dictionary = {}
 		var cbest_score := -1.0e9
-		# Derive the true side-wall axis from _clear_facing — filler buildings can
-		# face any cardinal direction, so hard-coded ±X is wrong for rotated ones.
+		# Derive the true side-wall axis from _clear_facing â€” filler buildings can
+		# face any cardinal direction, so hard-coded Â±X is wrong for rotated ones.
 		var filler_yaw := _clear_facing(bfp, all_fps)
 		# _footprint() uses _park_or_street_facing which can differ from _clear_facing,
 		# so recompute half-extents from the actual filler rotation to avoid placing
@@ -1407,7 +1407,7 @@ func _collect_mesh_instances(node: Node, out: Array) -> void:
 			_collect_mesh_instances(c, out)
 
 
-# Generates a 128×128 seamlessly-tiling running-bond brick pattern as an
+# Generates a 128Ã—128 seamlessly-tiling running-bond brick pattern as an
 # ImageTexture. Bricks are warm-tinted near-white; mortar is a cooler mid-grey.
 # When applied with albedo_color, the colour tints both brick and mortar so
 # every building keeps its identifying hue.
@@ -1434,11 +1434,11 @@ func _make_brick_texture(mortar: Color = Color(0.52, 0.50, 0.48)) -> ImageTextur
 	return ImageTexture.create_from_image(img)
 
 
-# 128×128 horizontal lap-siding pattern. Each board has a cast-shadow at the
+# 128Ã—128 horizontal lap-siding pattern. Each board has a cast-shadow at the
 # top edge and brightens toward the bottom, plus subtle per-board variation.
 func _make_siding_texture() -> ImageTexture:
 	const SZ      := 128
-	const BOARDS  := 8     # 8 boards per tile → 16 px tall each
+	const BOARDS  := 8     # 8 boards per tile â†’ 16 px tall each
 	const BH      := SZ / BOARDS
 	const SHADOW  := 3     # shadow depth in pixels at the top of each board
 	var img := Image.create(SZ, SZ, false, Image.FORMAT_RGB8)
@@ -1469,7 +1469,7 @@ func _make_asphalt_tex() -> ImageTexture:
 			var n1 := absf(fmod(sin(float(px) * 127.1 + float(py) * 311.7) * 43758.5, 1.0))
 			var n2 := absf(fmod(sin(float(px) * 43.3  + float(py) * 89.7  + 7.3) * 18492.3, 1.0))
 			var n3 := absf(fmod(sin(float(px) * 7.1   + float(py) * 13.9  + 31.2) * 7634.2, 1.0))
-			var base := 0.78 + n1 * 0.10 + n3 * 0.06   # mid-grey aggregate, range 0.78–0.94
+			var base := 0.78 + n1 * 0.10 + n3 * 0.06   # mid-grey aggregate, range 0.78â€“0.94
 			# Sparse darker crack pixels: ~4 % of surface
 			var crack := n2 < 0.04
 			var v := base * (0.55 if crack else 1.0)
@@ -1513,7 +1513,7 @@ func _make_ripple_tex() -> ImageTexture:
 			var n2 := sin(u + v2)
 			var n3 := sin(r)
 			var raw := (n1 * 0.35 + n2 * 0.35 + n3 * 0.30)   # range ~-1 to 1
-			var v   := 0.82 + raw * 0.12                        # range 0.70 – 0.94
+			var v   := 0.82 + raw * 0.12                        # range 0.70 â€“ 0.94
 			v = clampf(v, 0.0, 1.0)
 			# Slight blue tint on highlights
 			img.set_pixel(px, py, Color(v * 0.93, v * 0.97, v))
@@ -1565,7 +1565,7 @@ func _make_shingle_tex() -> ImageTexture:
 
 
 # Concrete sidewalk panels with expansion joint lines.
-# 128×128 with 2×2 panels (64 px each); joint lines are 3 px wide and darker.
+# 128Ã—128 with 2Ã—2 panels (64 px each); joint lines are 3 px wide and darker.
 func _make_concrete_tex() -> ImageTexture:
 	const SZ    := 128
 	const PANEL := 64
@@ -1586,7 +1586,7 @@ func _make_concrete_tex() -> ImageTexture:
 	return ImageTexture.create_from_image(img)
 
 
-# Large-blotch grass for low-poly Lego look — very low frequency gives bold patches.
+# Large-blotch grass for low-poly Lego look â€” very low frequency gives bold patches.
 func _make_grass_tex() -> ImageTexture:
 	const SZ := 128
 	var img := Image.create(SZ, SZ, false, Image.FORMAT_RGB8)
@@ -1618,7 +1618,7 @@ func _make_bark_tex() -> ImageTexture:
 	return ImageTexture.create_from_image(img)
 
 
-# Mottled dappled-light leaf canopy — random bright and dark patches.
+# Mottled dappled-light leaf canopy â€” random bright and dark patches.
 func _make_leaf_tex() -> ImageTexture:
 	const SZ := 128
 	var img := Image.create(SZ, SZ, false, Image.FORMAT_RGB8)
@@ -1634,7 +1634,7 @@ func _make_leaf_tex() -> ImageTexture:
 	return ImageTexture.create_from_image(img)
 
 
-# Fine granular sand — high-frequency noise, very subtle.
+# Fine granular sand â€” high-frequency noise, very subtle.
 func _make_sand_tex() -> ImageTexture:
 	const SZ := 128
 	var img := Image.create(SZ, SZ, false, Image.FORMAT_RGB8)
@@ -1669,7 +1669,7 @@ func _tex_mat(color: Color, tex: ImageTexture, scale: Vector3) -> void:
 # Input
 # -----------------------------------------------------------------------------
 func _setup_input() -> void:
-	# Keyboard only — WASD or the arrow keys. No mouse needed anywhere.
+	# Keyboard only â€” WASD or the arrow keys. No mouse needed anywhere.
 	_add_key_action("move_forward", [KEY_W, KEY_UP])
 	_add_key_action("move_back", [KEY_S, KEY_DOWN])
 	_add_key_action("turn_left", [KEY_A, KEY_LEFT])
@@ -1760,7 +1760,7 @@ func _build_bounds() -> void:
 		bounds.add_child(col)
 	add_child(bounds)
 
-	# East sidewalk barrier — continuous invisible wall at x=143 (outer edge of east sidewalk).
+	# East sidewalk barrier â€” continuous invisible wall at x=143 (outer edge of east sidewalk).
 	var esb := StaticBody3D.new()
 	esb.name = "EastSidewalkBarrier"
 	var sc := CollisionShape3D.new()
@@ -1812,11 +1812,11 @@ func _build_roads() -> void:
 
 	# Asphalt grid (the crossing slabs simply overlap at intersections). Kept
 	# nearly flush with the ground so the player walks on it without sinking in.
-	# N-S roads stop at z=141 (beach edge) — length 291, centre at -4.5.
+	# N-S roads stop at z=141 (beach edge) â€” length 291, centre at -4.5.
 	for gx in GRID:
 		_slab(roads, Vector3(ROAD_W, 0.06, 291.0), Vector3(gx, 0.0, -4.5), ASPHALT)
 	for gz in GRID:
-		# Span = 270 → roads stop at x=±135 (outermost N-S grid lines), no stubs into mall/woods zones.
+		# Span = 270 â†’ roads stop at x=Â±135 (outermost N-S grid lines), no stubs into mall/woods zones.
 		_slab(roads, Vector3(270.0, 0.06, ROAD_W), Vector3(0, 0.0, gz), ASPHALT)
 
 	_build_sidewalks(roads)
@@ -1882,7 +1882,7 @@ func _segments() -> Array:
 	return segs
 
 
-# Dashed center lines on the four downtown "main streets" (±32), broken at
+# Dashed center lines on the four downtown "main streets" (Â±32), broken at
 # intersections.
 func _build_lane_lines(roads: Node3D) -> void:
 	for line in [-HALF_BLOCK, HALF_BLOCK]:
@@ -1891,7 +1891,7 @@ func _build_lane_lines(roads: Node3D) -> void:
 			if not _near_grid(p, HALF + 2.0):
 				if p < 141.0:   # N-S dashes stop at beach edge
 					_slab(roads, Vector3(0.35, 0.04, 2.4), Vector3(line, 0.06, p), LINE)
-				if absf(p) < 135.0:   # E-W dashes stop at grid boundary — no stubs past x=±135
+				if absf(p) < 135.0:   # E-W dashes stop at grid boundary â€” no stubs past x=Â±135
 					_slab(roads, Vector3(2.4, 0.04, 0.35), Vector3(p, 0.06, line), LINE)
 			p += 5.0
 
@@ -2086,7 +2086,7 @@ func _build_town(layout: Array, goals: Dictionary, goal_names: Array) -> void:
 			node.set_meta("goal_street_axis_x", axis_x)
 			node.set_meta("goal_street_line", _nearest(spot.x if axis_x else spot.z))
 			# How far along the street (each way from the goal) still counts as
-			# "directly in front" — the block frontage between the two flanking
+			# "directly in front" â€” the block frontage between the two flanking
 			# intersections, minus the road at each so it stays on the segment.
 			node.set_meta("goal_seg_half", HALF_BLOCK - HALF)
 			# Where the building's name label floats once it's been found: a sign
@@ -2095,7 +2095,7 @@ func _build_town(layout: Array, goals: Dictionary, goal_names: Array) -> void:
 					+ Vector3(0, size.y + 5.0, 0))
 			goals[cfg.name] = node
 			goal_names.append(cfg.name)
-			# Buildings with facade icons (cross, burger) — added as hidden nodes
+			# Buildings with facade icons (cross, burger) â€” added as hidden nodes
 			# under _icons_root so they're excluded from baking and can be revealed
 			# individually when the player discovers that building.
 			if cfg.name in ["Hospital", "Restaurant", "Drugstore", "Church", "Bakery", "Police Station", "Bookstore", "Starbucks"]:
@@ -2105,7 +2105,7 @@ func _build_town(layout: Array, goals: Dictionary, goal_names: Array) -> void:
 # Pack each block with buildings to create a dense "city maze": the goal sits at
 # the block centre and houses/shops/offices fill a ring of slots around it (any
 # that would overlap the goal are skipped). The street grid between blocks is
-# what you navigate. All positions are final (no setback) — the slot spacing is
+# what you navigate. All positions are final (no setback) â€” the slot spacing is
 # pre-chosen so nothing spills onto a road. Coordinates are in world units.
 const SLOT := 13.0              # ring offset from block centre (tight packing)
 const CORE := 9.0               # central courtyard half-size kept clear of buildings
@@ -2225,7 +2225,7 @@ func _courtyard_slab(parent: Node3D, pos: Vector3, color: Color, circular: bool 
 func _courtyard_props(cx: float, cz: float, placed: Array, rng: RandomNumberGenerator) -> Array:
 	var out := []
 
-	# Deterministic courtyard surface variant — 0=dirt, 1=cement, 2=none.
+	# Deterministic courtyard surface variant â€” 0=dirt, 1=cement, 2=none.
 	var crng := RandomNumberGenerator.new()
 	crng.seed = abs(int(cx * 997 + cz * 1009)) + 3571
 	var variant := crng.randi() % 3
@@ -2350,7 +2350,7 @@ func _pick_floors(rng: RandomNumberGenerator, hi: int) -> int:
 func _footprint(cfg: Dictionary) -> Dictionary:
 	var s: Vector3 = cfg.size
 	var yaw := _park_or_street_facing(cfg.pos)
-	# yaw of ±PI/2 turns the depth (z) along world X; yaw of 0/PI keeps it along Z.
+	# yaw of Â±PI/2 turns the depth (z) along world X; yaw of 0/PI keeps it along Z.
 	var faces_x: bool = absf(yaw) > 0.01 and absf(absf(yaw) - PI) > 0.01
 	return {"x": cfg.pos.x, "z": cfg.pos.z,
 			"hx": (s.z if faces_x else s.x) * 0.5, "hz": (s.x if faces_x else s.z) * 0.5}
@@ -2499,7 +2499,7 @@ func _spawn_building(cfg: Dictionary) -> Node3D:
 		"gas":
 			_build_gas(body, size)
 		"house":
-			# 0–25 % brick, 25–50 % siding, 50–100 % speckle.
+			# 0â€“25 % brick, 25â€“50 % siding, 50â€“100 % speckle.
 			var brng := RandomNumberGenerator.new()
 			brng.seed = abs(hash(cfg.get("pos", Vector3.ZERO)) + 91273)
 			var roll := brng.randf()
@@ -2873,7 +2873,7 @@ func _sheriff_badge(body: Node3D, size: Vector3) -> void:
 	mi.position = Vector3(0.0, y, z)
 	body.add_child(mi)
 
-	# Circles at the 6 outer tips — 25% smaller, coplanar with the star face.
+	# Circles at the 6 outer tips â€” 25% smaller, coplanar with the star face.
 	for i in 6:
 		var angle := deg_to_rad(30.0 + i * 60.0)
 		var cp := Node3D.new()
@@ -2979,7 +2979,7 @@ func _build_station(body: Node3D, size: Vector3, color: Color, roof: Color) -> v
 func _build_gas(body: Node3D, size: Vector3) -> void:
 	# Grey cement ground pad.
 	_box(body, Vector3(size.x, 0.08, size.z), Vector3(0, 0.04, 0), Color(0.62, 0.63, 0.64))
-	# Canopy on four posts — raised 50 % (4.2 → 6.3).
+	# Canopy on four posts â€” raised 50 % (4.2 â†’ 6.3).
 	var canopy_h := 6.3
 	_box(body, Vector3(size.x, 0.5, size.z), Vector3(0, canopy_h, 0), Color(0.90, 0.90, 0.92))
 	_box(body, Vector3(size.x, 0.25, size.z), Vector3(0, canopy_h - 0.3, 0), Color(0.80, 0.20, 0.20))  # trim
@@ -3099,7 +3099,7 @@ func _collide(body: Node3D, size: Vector3) -> void:
 
 
 func _collide_gas(body: Node3D, size: Vector3) -> void:
-	# Pump islands — height doubled to 3.2.
+	# Pump islands â€” height doubled to 3.2.
 	for sx in [-1.0, 1.0]:
 		var ps := Vector3(1.0, 3.2, 0.8)
 		var pc := CollisionShape3D.new()
@@ -3108,7 +3108,7 @@ func _collide_gas(body: Node3D, size: Vector3) -> void:
 		pc.shape = pb
 		pc.position = Vector3(sx * 2.5, ps.y * 0.5, size.z * 0.2)
 		body.add_child(pc)
-	# Canopy posts — four cylinders, matching _build_gas positions exactly.
+	# Canopy posts â€” four cylinders, matching _build_gas positions exactly.
 	var canopy_h := 6.3
 	for sx2 in [-1.0, 1.0]:
 		for sz2 in [-1.0, 1.0]:
@@ -3350,7 +3350,7 @@ func _tune_materials() -> void:
 			mat.roughness = 0.88
 		elif color.is_equal_approx(Color(0.08, 0.38, 0.92)):   # ocean
 			mat.roughness = 0.03
-			mat.metallic  = 0.45
+			mat.metallic  = 0.0
 		elif color.is_equal_approx(Color(0.40, 0.65, 0.85)):   # fountain water
 			mat.roughness = 0.08
 			mat.metallic  = 0.15
@@ -3408,15 +3408,15 @@ func _build_beach(terrain: Node3D) -> void:
 	var ocean     := Color(0.08, 0.38, 0.92)
 
 	# Sand starts at z=141 (road/sidewalk clipped here). Centre at 166, length 50.
-	# Widths capped at 396 so nothing hangs past the ground plane's x=±198 edge.
-	# Dry sand strip (z=141 → z=191)
+	# Widths capped at 396 so nothing hangs past the ground plane's x=Â±198 edge.
+	# Dry sand strip (z=141 â†’ z=191)
 	_box(terrain, Vector3(396, 0.30, 50), Vector3(0, -0.13, 166.0), sand)
-	# Wet sand at waterline (z=191 → z=201)
+	# Wet sand at waterline (z=191 â†’ z=201)
 	_box(terrain, Vector3(396, 0.20, 10), Vector3(0, -0.09, 196.0), wet_sand)
-	# Ocean (z=198 → z=318, mostly beyond player reach but looks infinite)
+	# Ocean (z=198 â†’ z=318, mostly beyond player reach but looks infinite)
 	_box(terrain, Vector3(396, 0.15, 120), Vector3(0, -0.08, 258.0), ocean)
 
-	# Barrier further into the ocean — player can now wade into the shallows.
+	# Barrier further into the ocean â€” player can now wade into the shallows.
 	var water_wall := StaticBody3D.new()
 	water_wall.name = "WaterBarrier"
 	var wc := CollisionShape3D.new()
@@ -3471,7 +3471,7 @@ func _build_beach(terrain: Node3D) -> void:
 	]:
 		_palm(terrain, Vector3(data[0], 0.3, data[1]))
 
-	# Benches sit on the southernmost sidewalk (center z≈140.6) facing the beach.
+	# Benches sit on the southernmost sidewalk (center zâ‰ˆ140.6) facing the beach.
 	for xi in [-100.0, -60.0, -20.0, 20.0, 60.0, 100.0]:
 		_bench(terrain, Vector3(xi, 0.1, 140.5), 0.0)
 
@@ -3508,7 +3508,7 @@ func _palm(parent: Node3D, base: Vector3) -> void:
 
 
 func _setup_train_schedule() -> void:
-	# First train arrives 20 s after the intro; subsequent ones every 75–95 s.
+	# First train arrives 20 s after the intro; subsequent ones every 75â€“95 s.
 	var t := get_tree().create_timer(20.0)
 	t.timeout.connect(_spawn_train)
 
@@ -3527,11 +3527,11 @@ func _build_train_tracks(terrain: Node3D) -> void:
 	var tie      := Color(0.42, 0.30, 0.18)
 	var platform := Color(0.82, 0.80, 0.76)
 	var z_tr     := -150.0
-	var span     := 396.0   # trimmed to stay within ground plane x=±198
+	var span     := 396.0   # trimmed to stay within ground plane x=Â±198
 
 	# Ballast bed
 	_box(terrain, Vector3(span, 0.30, 5.0), Vector3(0, -0.04, z_tr), ballast)
-	# Rails (decorative only — no collision, player can walk through)
+	# Rails (decorative only â€” no collision, player can walk through)
 	_box(terrain, Vector3(span, 0.18, 0.22), Vector3(0, 0.22, z_tr - 1.0), rail)
 	_box(terrain, Vector3(span, 0.18, 0.22), Vector3(0, 0.22, z_tr + 1.0), rail)
 	# Ties (sleepers) every 2 units
@@ -3553,7 +3553,7 @@ func _build_train_tracks(terrain: Node3D) -> void:
 		_box(terrain, Vector3(0.8, step_h, 6.0), step_c, platform)
 		_prop_box(step_c, Vector3(0.8, step_h, 6.0), 0.0)
 	# Invisible ramp so CharacterBody3D can walk up the step risers.
-	# Spans x=18.0 → x=14.8, rising from y=0 to y=0.85.  At each riser face the
+	# Spans x=18.0 â†’ x=14.8, rising from y=0 to y=0.85.  At each riser face the
 	# player's feet are already above the riser height, so they glide up the slope
 	# while the visual steps remain underneath.
 	var r_run  := 3.2       # 18.0 - 14.8
@@ -3570,13 +3570,13 @@ func _build_train_tracks(terrain: Node3D) -> void:
 	rc.rotation.z = -r_ang
 	ramp.add_child(rc)
 	add_child(ramp)
-	# Canopy roof — raised to y=4.8 so it clears the player's head comfortably.
+	# Canopy roof â€” raised to y=4.8 so it clears the player's head comfortably.
 	var canopy_y  := 4.8
 	var canopy_sz := Vector3(30, 0.30, 8)
 	var canopy_p  := Vector3(0, canopy_y, z_tr + 6.5)
 	_box(terrain, canopy_sz, canopy_p, Color(0.35, 0.28, 0.60))
-	_prop_box(canopy_p, canopy_sz, 0.0)   # solid roof — player can't pass through
-	# Canopy pillars — height matches new roof bottom
+	_prop_box(canopy_p, canopy_sz, 0.0)   # solid roof â€” player can't pass through
+	# Canopy pillars â€” height matches new roof bottom
 	for px in [-13.0, 13.0]:
 		var pil_h := canopy_y - 0.15   # top of pillar meets underside of roof
 		var pil_p := Vector3(px, pil_h * 0.5, z_tr + 6.5)
@@ -3599,7 +3599,7 @@ func _build_train_tracks(terrain: Node3D) -> void:
 func _build_woods(terrain: Node3D) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 7
-	# Trees start at x=-150 (western sidewalk outer edge is ~x=-141.7; ±3 jitter
+	# Trees start at x=-150 (western sidewalk outer edge is ~x=-141.7; Â±3 jitter
 	# keeps everything safely west of the road). Z capped at 133 so no tree lands
 	# on the southern sidewalk or beach.
 	var col_x := -150.0
@@ -3634,11 +3634,11 @@ func _build_mall(terrain: Node3D) -> void:
 	var sign_red    := Color(0.84, 0.18, 0.18)
 
 	# Layout (east of town, east sidewalk outer edge ~x=141.7, barrier at x=143):
-	#   Mall       x=144 → x=180  z=-45 → z=-5   (west face at x=144, entrance faces sidewalk)
-	#   Parking lot x=144 → x=180  z=-5  → z=65  (touches mall south face, no gap)
+	#   Mall       x=144 â†’ x=180  z=-45 â†’ z=-5   (west face at x=144, entrance faces sidewalk)
+	#   Parking lot x=144 â†’ x=180  z=-5  â†’ z=65  (touches mall south face, no gap)
 
 	# --- Continuous east sidewalk -------------------------------------------------
-	# Fill all E-W-road gaps in the east N-S sidewalk (x≈140.6) except z=27, which
+	# Fill all E-W-road gaps in the east N-S sidewalk (xâ‰ˆ140.6) except z=27, which
 	# becomes the parking-lot entrance driveway.
 	var sw_x := 135.0 + SW_OFF   # sidewalk centre = 140.6
 	for gap_z in [-135.0, -81.0, -27.0, 81.0, 135.0]:   # z=27 left open for entrance
@@ -3654,7 +3654,7 @@ func _build_mall(terrain: Node3D) -> void:
 	for zi in range(6):
 		_box(terrain, Vector3(32, 0.08, 0.22), Vector3(162, 0.05, 1.0 + zi * 12.0), stripe)
 
-	# Mall building — StaticBody3D so the player collides with it.
+	# Mall building â€” StaticBody3D so the player collides with it.
 	# Centre at (162, 0, -27): west face at x=144 (entrance), aligned with z=-27 E-W road.
 	var mall := StaticBody3D.new()
 	mall.name = "Mall"
@@ -3672,7 +3672,7 @@ func _build_mall(terrain: Node3D) -> void:
 			_box_mat(mall, Vector3(0.2, 3.2, 5.0),
 					Vector3(-mw.x * 0.5 + 0.15, 2.5 + r2 * 4.0, -13.5 + c2 * 9.0),
 					_glass())
-	# Entrance on west face — framed double door with overhead canopy.
+	# Entrance on west face â€” framed double door with overhead canopy.
 	var door_dark  := Color(0.22, 0.20, 0.18)   # dark charcoal door panels
 	var frame_col  := Color(0.60, 0.58, 0.54)   # light concrete frame / pilasters
 	var wx := -mw.x * 0.5   # local x of west face = -18
@@ -3681,7 +3681,7 @@ func _build_mall(terrain: Node3D) -> void:
 	_box(mall, Vector3(0.35, 3.8, 0.4), Vector3(wx + 0.17, 1.9,  2.2), frame_col)
 	# Lintel spanning the opening
 	_box(mall, Vector3(0.35, 0.55, 4.8), Vector3(wx + 0.17, 3.73, 0), frame_col)
-	# Left door panel — glass to eliminate z-fighting with wall behind
+	# Left door panel â€” glass to eliminate z-fighting with wall behind
 	_box_mat(mall, Vector3(0.18, 3.1, 1.75), Vector3(wx + 0.09, 1.55, -0.9), _glass())
 	# Right door panel
 	_box_mat(mall, Vector3(0.18, 3.1, 1.75), Vector3(wx + 0.09, 1.55,  0.9), _glass())
@@ -3691,7 +3691,7 @@ func _build_mall(terrain: Node3D) -> void:
 	_box(mall, Vector3(0.9, 0.18, 5.0), Vector3(wx - 0.27, 4.0, 0), mall_accent)
 	# Rooftop sign on west face
 	_box(mall, Vector3(0.4, 1.8, 20.0), Vector3(-mw.x * 0.5, mw.y + 0.9, 0), sign_red)
-	# "Seven Park" text on the sign — hidden until the mall is discovered.
+	# "Seven Park" text on the sign â€” hidden until the mall is discovered.
 	var sign_lbl := Label3D.new()
 	sign_lbl.text = "Seven Park Mall"
 	sign_lbl.font_size = 160
@@ -3737,3 +3737,4 @@ func _build_mall(terrain: Node3D) -> void:
 			var col: Color = v_colors[rng.randi() % v_colors.size()]
 			_build_vehicle(terrain, Vector3(cxp, 0.0, rz), face, d, col, kind)
 			_prop_box(Vector3(cxp, 0.8, rz), Vector3(d.x, 1.7, d.z), face)
+
