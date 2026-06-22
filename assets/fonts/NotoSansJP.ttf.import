@@ -1,4 +1,4 @@
-[remap]
+﻿[remap]
 
 importer="font_data_dynamic"
 type="FontFile"
@@ -30,7 +30,19 @@ Fallbacks=null
 fallbacks=[]
 Compress=null
 compress=true
-preload=[{"chars": [32, 127, 12352, 12543, 19968, 40959], "name": "ja", "sizes": [[14, 0], [17, 0], [20, 0], [22, 0], [24, 0], [26, 0], [30, 0], [36, 0]]}]
-language_support={"ja": true}
-script_support={"Hira": true, "Kana": true, "Hani": true}
+preload=[{
+"chars": [32, 127, 12288, 12543, 19968, 40959, 65280, 65519],
+"glyphs": null,
+"name": "ja",
+"sizes": [[14, 0], [17, 0], [20, 0], [22, 0], [24, 0], [26, 0], [30, 0], [36, 0]]
+}]
+language_support={
+"ja": true
+}
+script_support={
+"Hani": true,
+"Hira": true,
+"Kana": true
+}
 opentype_features={}
+
