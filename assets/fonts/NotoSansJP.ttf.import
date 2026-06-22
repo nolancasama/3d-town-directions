@@ -1,0 +1,36 @@
+[remap]
+
+importer="font_data_dynamic"
+type="FontFile"
+uid="uid://c07odemgcqeoo"
+path="res://.godot/imported/NotoSansJP.ttf-2659246e986fc2d136c17e42de851678.fontdata"
+
+[deps]
+
+source_file="res://assets/fonts/NotoSansJP.ttf"
+dest_files=["res://.godot/imported/NotoSansJP.ttf-2659246e986fc2d136c17e42de851678.fontdata"]
+
+[params]
+
+Rendering=null
+antialiasing=1
+generate_mipmaps=false
+disable_embedded_bitmaps=true
+multichannel_signed_distance_field=false
+msdf_pixel_range=8
+msdf_size=48
+allow_system_fallback=true
+force_autohinter=false
+modulate_color_glyphs=false
+hinting=1
+subpixel_positioning=4
+keep_rounding_remainders=true
+oversampling=0.0
+Fallbacks=null
+fallbacks=[]
+Compress=null
+compress=true
+preload=[{"chars": [32, 127, 12352, 12543, 19968, 40959], "name": "ja", "sizes": [[14, 0], [17, 0], [20, 0], [22, 0], [24, 0], [26, 0], [30, 0], [36, 0]]}]
+language_support={"ja": true}
+script_support={"Hira": true, "Kana": true, "Hani": true}
+opentype_features={}
