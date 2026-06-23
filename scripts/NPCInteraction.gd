@@ -371,44 +371,44 @@ func _on_heard(text: String) -> void:
 	if _active != self or _cinematic:
 		return
 	# Alternatives are newline-separated (up to 5 from the STT engine).
-	# Use the top alternative for simple phrase matching; try all for goal matching.
 	var alts := text.split("\n", false)
-	var t := _clean(alts[0])
-	if _state == State.GREET and t.contains("how are you"):
+	if alts.is_empty():
+		return
+	if _state == State.GREET and _heard(alts, ["how are you", "how you", "how are"]):
 		var replies := ["I'm fine!", "I'm good!", "I'm great, thanks!"]
 		var r: String = replies[randi() % replies.size()]
 		_dialogue.speak(r, voice_pitch, voice_rate, voice_index, voice_family)
 		_dialogue.show_text(npc_name, r)
 		_speech.listen()
-	elif _state == State.GREET and (t.contains("hello") or t.contains("good morning")):
+	elif _state == State.GREET and _heard(alts, ["hello", "good morning", "haro", "morning"]):
 		var replies := ["Hello!", "Hi there!", "Good morning!", "Hey!"]
 		var r: String = replies[randi() % replies.size()]
 		_dialogue.speak(r, voice_pitch, voice_rate, voice_index, voice_family)
 		_dialogue.show_text(npc_name, r)
 		_speech.listen()
-	elif _state == State.GREET and t.contains("excuse me"):
+	elif _state == State.GREET and _heard(alts, ["excuse me", "excuse", "ekusukyu"]):
 		_greet(false)
-	elif _state == State.ASK and (t.contains("bye") or t.contains("goodbye") or t.contains("see you") or t.contains("thank you")):
+	elif _state == State.ASK and _heard(alts, ["bye", "goodbye", "see you", "thank you", "senkyu", "baibai"]):
 		var farewells := ["See you!", "Take care!", "Goodbye!", "Anytime, good luck!"]
 		var r: String = farewells[randi() % farewells.size()]
 		_dialogue.speak(r, voice_pitch, voice_rate, voice_index, voice_family)
-		_dialogue.show_text(npc_name,r)
+		_dialogue.show_text(npc_name, r)
 		_dialogue.hide_text_input()
 		_reset()
-	elif _state == State.ASK and (t.contains("hello") or t.contains("good morning")):
+	elif _state == State.ASK and _heard(alts, ["hello", "good morning", "haro", "morning"]):
 		if not _greeted:
 			_greeted = true
 			var replies := ["Hello!", "Hi there!", "Good morning!", "Hey!"]
 			var r: String = replies[randi() % replies.size()]
 			_dialogue.speak(r, voice_pitch, voice_rate, voice_index, voice_family)
-			_dialogue.show_text(npc_name,r)
+			_dialogue.show_text(npc_name, r)
 		_set_mic_state(MicState.LISTENING)
 		_speech.listen()
-	elif _state == State.ASK and t.contains("how are you"):
+	elif _state == State.ASK and _heard(alts, ["how are you", "how you", "how are"]):
 		var replies := ["I'm fine!", "I'm good!", "I'm great, thanks!"]
 		var r: String = replies[randi() % replies.size()]
 		_dialogue.speak(r, voice_pitch, voice_rate, voice_index, voice_family)
-		_dialogue.show_text(npc_name,r)
+		_dialogue.show_text(npc_name, r)
 		_set_mic_state(MicState.LISTENING)
 		_speech.listen()
 	elif _state == State.ASK:
@@ -546,9 +546,19 @@ func _set_mic_state(state: int) -> void:
 # -----------------------------------------------------------------------------
 func _clean(s: String) -> String:
 	var r := s.to_lower()
-	for ch in ["'", ".", ",", "!", "?", "-", "’"]:
+	for ch in ["’", ".", ",", "!", "?", "-", "’"]:
 		r = r.replace(ch, "")
 	return r
+
+
+# Returns true if any STT alternative contains at least one of the given phrases.
+func _heard(alts: PackedStringArray, phrases: Array) -> bool:
+	for alt in alts:
+		var c := _clean(alt)
+		for phrase in phrases:
+			if c.contains(phrase):
+				return true
+	return false
 
 
 func _match_goal(cleaned_text: String) -> String:
