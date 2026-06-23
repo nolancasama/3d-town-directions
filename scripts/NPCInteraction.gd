@@ -17,6 +17,34 @@ extends Node3D
 # press E to greet, E again for the destination menu.
 # =============================================================================
 
+# Phonetic / shorthand alternatives for goal names.
+# Covers katakana-English pronunciation patterns common among Japanese
+# elementary school students, plus Chrome STT mishear variants.
+const GOAL_ALIASES: Dictionary = {
+	"Library":          ["rye bra", "rai bura", "lie berry", "lie bra", "raiburari", "ribrary"],
+	"Hospital":         ["hosu", "hospita", "hoshipital", "hosupita", "hosupi", "hospitoru"],
+	"Drugstore":        ["drug store", "doraggu", "drag store"],
+	"Bookstore":        ["book store", "bukku"],
+	"Supermarket":      ["super market", "supa market", "suupaa"],
+	"Convenience Store":["convenience", "konbini", "combini", "konbiniensu"],
+	"Restaurant":       ["restoran", "resutoran", "resu"],
+	"Swimming Pool":    ["swim pool", "suimingu", "sweeming pool", "swimmin pool"],
+	"Starbucks":        ["star bucks", "star box"],
+	"Gas Station":      ["gas stand", "gasorin", "gasoline station", "gasorin station"],
+	"Post Office":      ["post offis", "postu"],
+	"Museum":           ["myuzeum", "myujiamu", "myuziam", "mezeum"],
+	"City Hall":        ["city hole", "shiti hall", "shitty hall"],
+	"Police Station":   ["porisu", "police stay shun", "poris"],
+	"Fire Station":     ["faia station", "fire stay shun"],
+	"Shopping Mall":    ["mall", "seven park", "shopping center", "shoppin"],
+	"Bakery":           ["beika ri", "beikari", "bake ri"],
+	"Bank":             ["banco"],
+	"School":           ["sukuru", "sukuuru"],
+	"Church":           ["chaachi", "chachi"],
+	"Hotel":            ["hoteru"],
+	"Nolan's House":    ["nolan house", "nolan home", "norans house", "noran house"],
+}
+
 enum State { IDLE, GREET, ASK }
 
 # Only one NPC converses at a time (they share a single recognizer).
@@ -27,6 +55,8 @@ static var _cinematic: bool = false
 @export var shirt_color: Color = Color(0.85, 0.45, 0.20)
 @export var pants_color: Color = Color(0.30, 0.28, 0.25)
 @export var hair_color: Color = Color(0.10, 0.08, 0.06)
+@export var female: bool = false
+@export var height_scale: float = 1.0
 @export var speed: float = 2.0
 
 var path: PackedVector3Array = PackedVector3Array()   # patrol loop (optional)
@@ -42,6 +72,7 @@ var _speech: SpeechInput
 var _hum: Humanoid
 var _arm_pivot: Node3D
 var _hint: Label3D
+var _query: Label3D    # "?" shown briefly when the NPC doesn't understand
 
 var _state: int = State.IDLE
 var _player_in_range: bool = false
@@ -49,13 +80,31 @@ var _conversing: bool = false   # true only once the player actually starts talk
 var _walk_i: int = 0
 var _greeted: bool = false      # true after first greeting reply this conversation
 
+enum MicState { OFF, LISTENING, PROCESSING }
+var _mic_state: int = MicState.OFF
+var _mic_dot: MeshInstance3D
+var _ripples: Array[MeshInstance3D] = []   # concentric sonar rings around the dot
+var _ellipsis_dots: Array[MeshInstance3D] = []  # three bouncing dots shown while processing
+var _dot_timer: float = 0.0
+
+const RIPPLE_COUNT := 3
+const RIPPLE_PERIOD := 1.4    # seconds for one ring to grow + fade
+const RIPPLE_MIN := 0.30      # starting radius scale
+const RIPPLE_MAX := 1.30      # ending radius scale
+
+var npc_name: String = "Townsperson"
+var voice_pitch: float = 1.0
+var voice_rate: float = 0.88
+var voice_index: int = 0
+var voice_family: String = "female"
+
 var _face_start: Basis
 var _face_end: Basis
 
 const ARM_REST_X := 0.0
 const ARM_POINT_X := PI * 0.5
 const POINT_HOLD_SECONDS := 2.0
-const HIDE_DIST := 70.0   # hide far-away NPCs entirely (cheap on low-end GPUs)
+const QUESTION_FLASH_SECONDS := 1.2
 
 
 func _ready() -> void:
@@ -74,6 +123,7 @@ func setup(dialogue: DialogueManager, camera_focus: CameraFocusManager,
 	_goal_names = goal_names
 	_speech = speech
 	_speech.heard.connect(_on_heard)
+	_speech.speech_started.connect(_on_speech_started)
 	_dialogue.text_submitted.connect(_on_text_submitted)
 
 
@@ -85,8 +135,10 @@ func _build_visuals() -> void:
 	_hum.shirt_color = shirt_color
 	_hum.pants_color = pants_color
 	_hum.hair_color = hair_color
+	_hum.female = female
 	_hum.walk_enabled = true
 	add_child(_hum)
+	_hum.scale = Vector3(height_scale, height_scale, height_scale)
 	_arm_pivot = _hum.right_arm_pivot
 	_arm_pivot.rotation.x = ARM_REST_X
 
@@ -112,8 +164,91 @@ func _build_visuals() -> void:
 	_hint.modulate = Color(1.0, 0.85, 0.1)   # bright yellow
 	_hint.outline_size = 20
 	_hint.outline_modulate = Color(0.1, 0.1, 0.1)
+	_hint.visibility_range_end = 70.0
+	_hint.visibility_range_end_margin = 4.0
 	_hint.visible = false
 	add_child(_hint)
+
+	# A "?" in the same style as the "!", flashed when the NPC can't make out
+	# what the player said while listening.
+	_query = Label3D.new()
+	_query.text = "?"
+	_query.position.y = 2.95
+	_query.font_size = 256
+	_query.pixel_size = 0.0045
+	_query.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	_query.modulate = Color(1.0, 0.85, 0.1)
+	_query.outline_size = 20
+	_query.outline_modulate = Color(0.1, 0.1, 0.1)
+	_query.visibility_range_end = 70.0
+	_query.visibility_range_end_margin = 4.0
+	_query.visible = false
+	add_child(_query)
+
+	# Listening indicator: a glowing cyan sphere (a mesh, so it never depends on
+	# whether a given glyph exists in the font).
+	_mic_dot = MeshInstance3D.new()
+	var dot_mesh := SphereMesh.new()
+	dot_mesh.radius = 0.22
+	dot_mesh.height = 0.44
+	_mic_dot.mesh = dot_mesh
+	var dot_mat := StandardMaterial3D.new()
+	dot_mat.albedo_color = Color(0.25, 0.85, 1.0)
+	dot_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	dot_mat.emission_enabled = true
+	dot_mat.emission = Color(0.25, 0.85, 1.0)
+	dot_mat.emission_energy_multiplier = 2.0
+	_mic_dot.material_override = dot_mat
+	_mic_dot.position.y = 2.95
+	_mic_dot.visibility_range_end = 70.0
+	_mic_dot.visibility_range_end_margin = 4.0
+	_mic_dot.visible = false
+	add_child(_mic_dot)
+
+	# Sonar ripples: thin cyan rings that grow outward from the dot and fade,
+	# staggered in phase so a steady stream radiates while the mic is open.
+	for i in RIPPLE_COUNT:
+		var ring := MeshInstance3D.new()
+		var torus := TorusMesh.new()
+		torus.inner_radius = 0.46
+		torus.outer_radius = 0.56
+		ring.mesh = torus
+		var rmat := StandardMaterial3D.new()
+		rmat.albedo_color = Color(0.25, 0.85, 1.0, 0.0)
+		rmat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		rmat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		rmat.emission_enabled = true
+		rmat.emission = Color(0.25, 0.85, 1.0)
+		rmat.emission_energy_multiplier = 1.5
+		ring.material_override = rmat
+		ring.position.y = 2.95
+		ring.visibility_range_end = 70.0
+		ring.visibility_range_end_margin = 4.0
+		ring.visible = false
+		add_child(ring)
+		_ripples.append(ring)
+
+	# Processing indicator: three small bouncing cyan spheres shown while the
+	# speech recogniser has detected audio and is waiting for a transcript.
+	var emat := StandardMaterial3D.new()
+	emat.albedo_color = Color(0.25, 0.85, 1.0)
+	emat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	emat.emission_enabled = true
+	emat.emission = Color(0.25, 0.85, 1.0)
+	emat.emission_energy_multiplier = 2.0
+	for i in 3:
+		var ed := MeshInstance3D.new()
+		var em := SphereMesh.new()
+		em.radius = 0.10
+		em.height = 0.20
+		ed.mesh = em
+		ed.material_override = emat
+		ed.position = Vector3((i - 1) * 0.30, 2.95, 0.0)
+		ed.visibility_range_end = 70.0
+		ed.visibility_range_end_margin = 4.0
+		ed.visible = false
+		add_child(ed)
+		_ellipsis_dots.append(ed)
 
 
 func _build_detection_area() -> void:
@@ -145,20 +280,50 @@ func _on_body_exited(body: Node3D) -> void:
 
 func _process(delta: float) -> void:
 	var engaged := (_active == self)
-	# Distance hiding: NPCs far from the player aren't drawn at all (you can
-	# only talk to them up close anyway). Engaged NPCs always stay visible.
-	if not engaged and _player != null:
-		if global_position.distance_to(_player.global_position) > HIDE_DIST:
-			if _hum.visible:
-				_hum.visible = false
-			return
-		elif not _hum.visible:
-			_hum.visible = true
-
 	_update_walk(delta)
 	if engaged and not _cinematic and _state == State.GREET:
 		if Input.is_action_just_pressed("interact") or Input.is_action_just_pressed("ui_accept"):
 			_greet()
+	if engaged and not _cinematic and _state == State.ASK:
+		if Input.is_action_just_pressed("ui_cancel"):
+			_reset()
+
+	if _mic_state != MicState.OFF:
+		_dot_timer += delta
+	if _mic_state == MicState.LISTENING:
+		var pulse := 1.0 + 0.15 * sin(_dot_timer * 3.5)
+		_mic_dot.scale = Vector3(pulse, pulse, pulse)
+	elif _mic_state == MicState.PROCESSING:
+		for i in 3:
+			var bounce := 0.10 * absf(sin(_dot_timer * 7.0 - float(i) * 1.1))
+			_ellipsis_dots[i].position.y = 2.95 + bounce
+		if _dot_timer > 5.0:
+			_set_mic_state(MicState.LISTENING)
+		var cam := get_viewport().get_camera_3d()
+		var head_pos := global_transform * Vector3(0.0, 2.95, 0.0)
+		# Build a camera-facing basis: the torus hole-axis (local +Y) points at the
+		# camera so each ring is seen face-on, like Wi-Fi arcs radiating outward.
+		var face := Basis()
+		if cam != null:
+			var dir := (cam.global_position - head_pos).normalized()
+			var bx := Vector3.UP.cross(dir)
+			if bx.length() < 0.0001:
+				bx = Vector3.RIGHT
+			bx = bx.normalized()
+			var bz := bx.cross(dir).normalized()
+			face = Basis(bx, dir, bz)
+		for i in _ripples.size():
+			var phase: float = fmod(_dot_timer / RIPPLE_PERIOD + float(i) / RIPPLE_COUNT, 1.0)
+			var rad: float = lerpf(RIPPLE_MIN, RIPPLE_MAX, phase)
+			var ring := _ripples[i]
+			var b := face
+			b.x *= rad      # scale the ring's in-plane axes -> grows the radius
+			b.z *= rad
+			ring.global_transform = Transform3D(b, head_pos)
+			# Fade in quickly, then out as the ring expands.
+			var a: float = clampf(phase * 4.0, 0.0, 1.0) * (1.0 - phase)
+			var rmat := ring.material_override as StandardMaterial3D
+			rmat.albedo_color.a = a * 0.85
 
 
 # Keep patrolling even when the player is just nearby; only stand still once an
@@ -192,10 +357,12 @@ func _greet(via_keyboard: bool = true) -> void:
 	_state = State.ASK
 	_conversing = true
 	_greeted = false
-	_dialogue.speak("Yes?")
-	_dialogue.show_text("Townsperson", "Yes?")
+	_dialogue.speak("Yes?", voice_pitch, voice_rate, voice_index, voice_family)
+	_dialogue.show_text(npc_name,"Yes?")
 	_face_target(_player)
+	_hint.visible = false
 	_speech.listen()
+	_set_mic_state(MicState.LISTENING)
 	if via_keyboard:
 		_dialogue.show_text_input()
 
@@ -203,14 +370,29 @@ func _greet(via_keyboard: bool = true) -> void:
 func _on_heard(text: String) -> void:
 	if _active != self or _cinematic:
 		return
-	var t := _clean(text)
-	if _state == State.GREET and t.contains("excuse me"):
+	# Alternatives are newline-separated (up to 5 from the STT engine).
+	# Use the top alternative for simple phrase matching; try all for goal matching.
+	var alts := text.split("\n", false)
+	var t := _clean(alts[0])
+	if _state == State.GREET and t.contains("how are you"):
+		var replies := ["I'm fine!", "I'm good!", "I'm great, thanks!"]
+		var r: String = replies[randi() % replies.size()]
+		_dialogue.speak(r, voice_pitch, voice_rate, voice_index, voice_family)
+		_dialogue.show_text(npc_name, r)
+		_speech.listen()
+	elif _state == State.GREET and (t.contains("hello") or t.contains("good morning")):
+		var replies := ["Hello!", "Hi there!", "Good morning!", "Hey!"]
+		var r: String = replies[randi() % replies.size()]
+		_dialogue.speak(r, voice_pitch, voice_rate, voice_index, voice_family)
+		_dialogue.show_text(npc_name, r)
+		_speech.listen()
+	elif _state == State.GREET and t.contains("excuse me"):
 		_greet(false)
 	elif _state == State.ASK and (t.contains("bye") or t.contains("goodbye") or t.contains("see you") or t.contains("thank you")):
 		var farewells := ["See you!", "Take care!", "Goodbye!", "Anytime, good luck!"]
 		var r: String = farewells[randi() % farewells.size()]
-		_dialogue.speak(r)
-		_dialogue.show_text("Townsperson", r)
+		_dialogue.speak(r, voice_pitch, voice_rate, voice_index, voice_family)
+		_dialogue.show_text(npc_name,r)
 		_dialogue.hide_text_input()
 		_reset()
 	elif _state == State.ASK and (t.contains("hello") or t.contains("good morning")):
@@ -218,30 +400,47 @@ func _on_heard(text: String) -> void:
 			_greeted = true
 			var replies := ["Hello!", "Hi there!", "Good morning!", "Hey!"]
 			var r: String = replies[randi() % replies.size()]
-			_dialogue.speak(r)
-			_dialogue.show_text("Townsperson", r)
+			_dialogue.speak(r, voice_pitch, voice_rate, voice_index, voice_family)
+			_dialogue.show_text(npc_name,r)
+		_set_mic_state(MicState.LISTENING)
 		_speech.listen()
 	elif _state == State.ASK and t.contains("how are you"):
 		var replies := ["I'm fine!", "I'm good!", "I'm great, thanks!"]
 		var r: String = replies[randi() % replies.size()]
-		_dialogue.speak(r)
-		_dialogue.show_text("Townsperson", r)
+		_dialogue.speak(r, voice_pitch, voice_rate, voice_index, voice_family)
+		_dialogue.show_text(npc_name,r)
+		_set_mic_state(MicState.LISTENING)
 		_speech.listen()
-	elif _state == State.ASK and (t.contains("where is") or t.contains("wheres")):
-		var dest := _match_goal(t)
-		if dest == "":
-			_dialogue.speak("Sorry, I don't know that place.")
-			_dialogue.show_text("Townsperson", "Sorry, I don't know that place.")
+	elif _state == State.ASK:
+		# Try every STT alternative for "where is <place>".
+		var dest := ""
+		var had_where_is := false
+		for alt in alts:
+			var c := _clean(alt)
+			if c.contains("where is") or c.contains("wheres"):
+				had_where_is = true
+				dest = _match_goal(c)
+				if dest != "":
+					break
+		if dest != "":
+			_deliver(dest)
+		elif had_where_is:
+			_dialogue.speak("Sorry, I don't know that place.", voice_pitch, voice_rate, voice_index, voice_family)
+			_dialogue.show_text(npc_name, "Sorry, I don't know that place.")
+			_set_mic_state(MicState.LISTENING)
 			_speech.listen()
 		else:
-			_deliver(dest)
+			_flash_question()
 	elif _state != State.IDLE:
-		_speech.listen()   # didn't catch it — keep the mic open
+		_speech.listen()
 
 
 # Text input submitted from the keyboard pipeline — route through same logic as STT.
 func _on_text_submitted(text: String) -> void:
 	if _active != self or _cinematic or _state != State.ASK:
+		return
+	if text.strip_edges().is_empty():
+		_reset()
 		return
 	_on_heard(text)
 
@@ -249,8 +448,8 @@ func _on_text_submitted(text: String) -> void:
 func _deliver_directions_only(dest_name: String) -> void:
 	# Re-navigate to an already-discovered building via text (no reward, no ring).
 	_dialogue.hide_text_input()
-	_dialogue.speak("It's over there!")
-	_dialogue.show_text("Townsperson", "It's over there!")
+	_dialogue.speak("It's over there!", voice_pitch, voice_rate, voice_index, voice_family)
+	_dialogue.show_text(npc_name,"It's over there!")
 	_goal_manager.set_target(dest_name, _goals[dest_name])
 
 
@@ -258,12 +457,14 @@ func _deliver(dest_name: String) -> void:
 	_state = State.IDLE
 	_speech.stop()
 	_hint.visible = false
+	_query.visible = false
+	_set_mic_state(MicState.OFF)
 	_dialogue.hide_text_input()
 	_player.set_input_enabled(false)
 	var target: Node3D = _goals[dest_name]
 
-	_dialogue.speak("It's over there!")
-	_dialogue.show_text("Townsperson", "It's over there!")
+	_dialogue.speak("It's over there!", voice_pitch, voice_rate, voice_index, voice_family)
+	_dialogue.show_text(npc_name,"It's over there!")
 	await _face_target(target)
 	await _raise_arm()
 	await _camera_focus.pan_to(target, global_position)
@@ -287,11 +488,57 @@ func _reset() -> void:
 	_conversing = false
 	_greeted = false
 	_hint.visible = false
+	_query.visible = false
+	_set_mic_state(MicState.OFF)
 	if _active == self:
 		_active = null
 		_speech.stop()
 		_dialogue.hide_dialogue()
 		_dialogue.hide_text_input()
+
+
+func _flash_question() -> void:
+	# Hide the listening dot/ripples, show "?" briefly, keep the mic open
+	# underneath, then restore the listening indicator if still in the ask phase.
+	_set_mic_state(MicState.OFF)
+	_query.visible = true
+	_speech.listen()
+	await get_tree().create_timer(QUESTION_FLASH_SECONDS).timeout
+	_query.visible = false
+	if _active == self and _state == State.ASK:
+		_set_mic_state(MicState.LISTENING)
+
+
+func _on_speech_started() -> void:
+	if _active != self or _cinematic:
+		return
+	if _mic_state == MicState.LISTENING:
+		_set_mic_state(MicState.PROCESSING)
+
+
+func _set_mic_state(state: int) -> void:
+	_mic_state = state
+	_dot_timer = 0.0
+	match state:
+		MicState.OFF:
+			_mic_dot.visible = false
+			for ring in _ripples:
+				ring.visible = false
+			for ed in _ellipsis_dots:
+				ed.visible = false
+		MicState.LISTENING:
+			_mic_dot.scale = Vector3.ONE
+			_mic_dot.visible = true
+			for ring in _ripples:
+				ring.visible = true
+			for ed in _ellipsis_dots:
+				ed.visible = false
+		MicState.PROCESSING:
+			_mic_dot.visible = false
+			for ring in _ripples:
+				ring.visible = false
+			for ed in _ellipsis_dots:
+				ed.visible = true
 
 
 # -----------------------------------------------------------------------------
@@ -308,6 +555,12 @@ func _match_goal(cleaned_text: String) -> String:
 	for n in _goal_names:
 		if cleaned_text.contains(_clean(n)):
 			return n
+	for goal_name in GOAL_ALIASES:
+		if not _goal_names.has(goal_name):
+			continue
+		for alias in GOAL_ALIASES[goal_name]:
+			if cleaned_text.contains(alias):
+				return goal_name
 	return ""
 
 

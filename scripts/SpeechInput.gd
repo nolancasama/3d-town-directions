@@ -19,6 +19,7 @@ extends Node
 # =============================================================================
 
 signal heard(text: String)
+signal speech_started
 
 var available: bool = false
 
@@ -39,13 +40,24 @@ func _setup_web() -> void:
 				var r = new SR();
 				r.lang = 'en-US';
 				r.continuous = false;
-				r.interimResults = false;
-				r.maxAlternatives = 1;
+				r.interimResults = true;
+				r.maxAlternatives = 5;
 				window._gd_speech_result = '';
 				window._gd_recog_active = false;
 				window._gd_should_listen = false;
+				window._gd_speech_started = false;
 				r.onresult = function (e) {
-					window._gd_speech_result = e.results[e.results.length - 1][0].transcript;
+					var result = e.results[e.results.length - 1];
+					if (!window._gd_speech_started) {
+						window._gd_speech_started = true;
+					}
+					if (result.isFinal) {
+						var parts = [];
+						for (var i = 0; i < result.length; i++) {
+							parts.push(result[i].transcript);
+						}
+						window._gd_speech_result = parts.join('\n');
+					}
 				};
 				r.onerror = function (e) {
 					window._gd_recog_active = false;
@@ -114,6 +126,10 @@ func _process(_delta: float) -> void:
 	if not available:
 		return
 	# Poll + clear the latest transcript the JS side captured.
+	var started = JavaScriptBridge.eval(
+			"(function(){var s=window._gd_speech_started||false;window._gd_speech_started=false;return s;})();", true)
+	if started:
+		speech_started.emit()
 	var res = JavaScriptBridge.eval(
 			"(function(){var t=window._gd_speech_result||'';window._gd_speech_result='';return t;})();", true)
 	if typeof(res) == TYPE_STRING and res != "":
