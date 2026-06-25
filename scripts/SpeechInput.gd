@@ -41,7 +41,7 @@ func _setup_web() -> void:
 				r.lang = 'en-US';
 				r.continuous = false;
 				r.interimResults = true;
-				r.maxAlternatives = 5;
+				r.maxAlternatives = 8;
 				window._gd_speech_result = '';
 				window._gd_recog_active = false;
 				window._gd_should_listen = false;

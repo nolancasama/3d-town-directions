@@ -45,6 +45,16 @@ const GOAL_ALIASES: Dictionary = {
 	"Nolan's House":    ["nolan house", "nolan home", "norans house", "noran house"],
 }
 
+# Accepted renderings of the mandatory "Where is ...?" carrier (the grammar point).
+# Tolerant of JP-L1 pronunciation and STT mistranscription, but every entry still
+# contains the where + copula structure, so a bare "where" (dropped "is") is NOT
+# accepted — the student must produce the copula. Contracted "where's" counts.
+const WHERE_IS_PHRASES: Array = [
+	"where is", "where's", "wheres", "where iz", "wherez", "where his",
+	"wear is", "ware is", "were is", "wea is", "weah is", "whereis",
+	"wears", "wares",   # engine renderings of the "where's" contraction
+]
+
 enum State { IDLE, GREET, ASK }
 
 # Only one NPC converses at a time (they share a single recognizer).
@@ -417,7 +427,7 @@ func _on_heard(text: String) -> void:
 		var had_where_is := false
 		for alt in alts:
 			var c := _clean(alt)
-			if c.contains("where is") or c.contains("wheres"):
+			if _has_where_is(c):
 				had_where_is = true
 				dest = _match_goal(c)
 				if dest != "":
@@ -549,6 +559,14 @@ func _clean(s: String) -> String:
 	for ch in ["’", ".", ",", "!", "?", "-", "’"]:
 		r = r.replace(ch, "")
 	return r
+
+
+# True if the cleaned text is a genuine "Where is ...?" attempt (copula required).
+func _has_where_is(cleaned_text: String) -> bool:
+	for p in WHERE_IS_PHRASES:
+		if cleaned_text.contains(p):
+			return true
+	return false
 
 
 # Returns true if any STT alternative contains at least one of the given phrases.
