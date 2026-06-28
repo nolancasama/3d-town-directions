@@ -381,7 +381,7 @@ func _on_heard(text: String) -> void:
 	if _active != self or _cinematic:
 		return
 	# Alternatives are newline-separated (up to 5 from the STT engine).
-	var alts := text.split("\n", false)
+	var alts := text.split("|", false)
 	if alts.is_empty():
 		return
 	if _state == State.GREET and _heard(alts, ["how are you", "how you", "how are"]):

@@ -56,7 +56,7 @@ func _setup_web() -> void:
 						for (var i = 0; i < result.length; i++) {
 							parts.push(result[i].transcript);
 						}
-						window._gd_speech_result = parts.join('\n');
+						window._gd_speech_result = parts.join('|');
 					}
 				};
 				r.onerror = function (e) {
