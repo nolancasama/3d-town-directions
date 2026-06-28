@@ -358,12 +358,12 @@ func add_hint(name: String, already_found: bool = false) -> void:
 	lbl.bbcode_enabled = true
 	lbl.fit_content = true
 	lbl.scroll_active = false
-	lbl.custom_minimum_size = Vector2(200, 22)
+	lbl.custom_minimum_size = Vector2(200, 0)
 	lbl.add_theme_font_size_override("normal_font_size", 17)
 	lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_hints[name] = lbl
 	if already_found:
-		lbl.text = "[color=#bbbbbb][s]" + name + "[/s][/color]"
+		lbl.text = "[color=#555555][s][color=#dddddd]" + name + "[/color][/s][/color]"
 		_disc_list.add_child(lbl)
 		_found_hint_count += 1
 	else:
@@ -380,7 +380,7 @@ func _apply_hint_found(name: String) -> void:
 	var lbl: RichTextLabel = _hints[name]
 	if lbl.text.contains("[s]"):
 		return
-	lbl.text = "[color=#bbbbbb][s]" + name + "[/s][/color]"
+	lbl.text = "[color=#555555][s][color=#dddddd]" + name + "[/color][/s][/color]"
 	_disc_list.move_child(lbl, _disc_list.get_child_count() - 1)
 	_found_hint_count += 1
 
