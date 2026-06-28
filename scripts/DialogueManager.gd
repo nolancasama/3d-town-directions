@@ -363,7 +363,7 @@ func add_hint(name: String, already_found: bool = false) -> void:
 	lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_hints[name] = lbl
 	if already_found:
-		lbl.text = "[color=#6a9a6a][s]" + name + "[/s][/color]"
+		lbl.text = "[color=#bbbbbb][s]" + name + "[/s][/color]"
 		_disc_list.add_child(lbl)
 		_found_hint_count += 1
 	else:
@@ -380,7 +380,7 @@ func _apply_hint_found(name: String) -> void:
 	var lbl: RichTextLabel = _hints[name]
 	if lbl.text.contains("[s]"):
 		return
-	lbl.text = "[color=#6a9a6a][s]" + name + "[/s][/color]"
+	lbl.text = "[color=#bbbbbb][s]" + name + "[/s][/color]"
 	_disc_list.move_child(lbl, _disc_list.get_child_count() - 1)
 	_found_hint_count += 1
 
