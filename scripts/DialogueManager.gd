@@ -347,6 +347,8 @@ func mark_discovered(name: String, _time_str: String) -> void:
 	_disc_count.text = "%d / %d か所発見" % [_found_count, _disc_total]
 	if _hints.has(name):
 		_apply_hint_found(name)
+	else:
+		add_hint(name, true)
 
 
 func add_hint(name: String, already_found: bool = false) -> void:
