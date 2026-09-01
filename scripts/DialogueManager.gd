@@ -69,6 +69,7 @@ const PANEL_H := -245.0
 const DEST_CARD_TOP := 12.0
 const ELAPSED_TOP := 94.0
 const DEST_FADE_SECONDS := 0.18
+const TUTORIAL_WIDTH := 640.0
 
 # --- Pre-recorded NPC voice clips -------------------------------------------
 # Each fixed NPC line maps to an audio file slug in res://assets/voice/. When a
@@ -351,6 +352,11 @@ func _build_tutorial_ui() -> void:
 
 	_tutorial_line1 = Label.new()
 	_tutorial_line1.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	# Capped width + wrapping: with the English sentence inline, a long place
+	# name ("Excuse me. Where is the Convenience Store?") would otherwise stretch
+	# the notice past the edges of a smaller window.
+	_tutorial_line1.custom_minimum_size = Vector2(TUTORIAL_WIDTH, 0)
+	_tutorial_line1.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_tutorial_line1.add_theme_font_size_override("font_size", 22)
 	_tutorial_line1.add_theme_color_override("font_color", Color(1, 1, 1))
 	if _jp_font:
@@ -359,6 +365,7 @@ func _build_tutorial_ui() -> void:
 
 	_tutorial_line2 = Label.new()
 	_tutorial_line2.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_tutorial_line2.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_tutorial_line2.add_theme_font_size_override("font_size", 18)
 	_tutorial_line2.add_theme_color_override("font_color", Color(0.72, 0.90, 0.76))
 	if _jp_font:

@@ -48,7 +48,7 @@ const CHOICE_PROMPT := "Where do you want to go next?"
 
 # Shown once, after the very first destination is chosen, to teach the loop:
 # choose a place -> walk up to a townsperson -> ask -> follow the directions.
-const TUTORIAL_LINE_1 := "人に近づいて、「Where is %s?」と聞いてみよう！"
+const TUTORIAL_LINE_1 := "人に近づいて、「Excuse me. Where is %s?」と聞いてみよう！"
 const TUTORIAL_LINE_2 := "人に近づくと話しかけられるよ。"
 const RECENT_OFFER_LIMIT := 2
 const NORMAL_TRIPS_AFTER_NEED := 2
