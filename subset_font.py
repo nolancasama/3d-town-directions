@@ -25,7 +25,31 @@ CHARS = (
     " !\"#$%&'()*+,-./:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"
 )
 
-unicodes = ",".join("U+{:04X}".format(ord(c)) for c in set(CHARS))
+def scan_script_chars():
+    """Every non-ASCII character appearing anywhere in scripts/*.gd.
+
+    Hand-maintaining the list above is not safe on its own: a glyph missing from
+    the subset still renders on Windows, because the OS falls back to a system
+    Japanese font, but comes out blank in the web build where no such fallback
+    exists. So new UI text looks fine in the editor and is broken for players.
+    Scanning the scripts closes that gap automatically.
+    """
+    import glob
+    import io
+
+    found = set()
+    for path in sorted(glob.glob("scripts/*.gd")):
+        with io.open(path, encoding="utf-8") as handle:
+            for ch in handle.read():
+                if ord(ch) > 127:
+                    found.add(ch)
+    return found
+
+
+scanned = scan_script_chars()
+print("Scanned scripts/*.gd: {} unique non-ASCII characters".format(len(scanned)))
+
+unicodes = ",".join("U+{:04X}".format(ord(c)) for c in set(CHARS) | scanned)
 
 args = [
     "C:/Windows/Fonts/NotoSansJP-VF.ttf",
