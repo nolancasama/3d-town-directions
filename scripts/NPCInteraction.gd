@@ -17,6 +17,8 @@ extends Node3D
 # press E to greet, E again for the destination menu.
 # =============================================================================
 
+const DestinationDirectorScript := preload("res://scripts/DestinationDirector.gd")
+
 # Phonetic / shorthand alternatives for goal names.
 # Covers katakana-English pronunciation patterns common among Japanese
 # elementary school students, plus Chrome STT mishear variants.
@@ -29,7 +31,7 @@ const GOAL_ALIASES: Dictionary = {
 	"Convenience Store":["convenience", "konbini", "combini", "konbiniensu"],
 	"Restaurant":       ["restoran", "resutoran", "resu"],
 	"Swimming Pool":    ["swim pool", "suimingu", "sweeming pool", "swimmin pool"],
-	"Starbucks":        ["star bucks", "star box"],
+	"Starbucks":        ["star bucks", "star box", "coffee shop", "cafe"],
 	"Gas Station":      ["gas stand", "gasorin", "gasoline station", "gasorin station"],
 	"Post Office":      ["post offis", "postu"],
 	"Museum":           ["myuzeum", "myujiamu", "myuziam", "mezeum"],
@@ -61,6 +63,32 @@ enum State { IDLE, GREET, ASK }
 static var _active: NPCInteraction = null
 # Set true during the opening cinematic to silence all NPC interaction.
 static var _cinematic: bool = false
+# Registry used to refer the player to a real nearby townsperson.
+static var _all: Array[NPCInteraction] = []
+# Townspeople who have already said "I don't know" during the current run of
+# questions. A referral never points back at one of them, otherwise two NPCs
+# bounce the player between each other. Cleared once directions are given.
+static var _recent_refusers: Array[NPCInteraction] = []
+
+const REFUSER_MEMORY := 4
+
+
+static func clear_referral_history() -> void:
+	_recent_refusers.clear()
+
+
+static func set_interaction_suppressed(suppressed: bool) -> void:
+	_cinematic = suppressed
+	if suppressed:
+		for npc: NPCInteraction in _all:
+			if is_instance_valid(npc):
+				npc._reset()
+	elif _active == null:
+		for npc: NPCInteraction in _all:
+			if is_instance_valid(npc) and npc._player_in_range:
+				_active = npc
+				npc._begin_greet()
+				break
 
 @export var shirt_color: Color = Color(0.85, 0.45, 0.20)
 @export var pants_color: Color = Color(0.30, 0.28, 0.25)
@@ -75,8 +103,9 @@ var _dialogue: DialogueManager
 var _camera_focus: CameraFocusManager
 var _player: PlayerController
 var _goal_manager: GoalManager
+var _destination_director: DestinationDirectorScript
 var _goals: Dictionary
-var _goal_names: Array
+var _goal_names: Array[String]
 var _speech: SpeechInput
 
 var _hum: Humanoid
@@ -114,21 +143,33 @@ var _face_end: Basis
 const ARM_REST_X := 0.0
 const ARM_POINT_X := PI * 0.5
 const POINT_HOLD_SECONDS := 2.0
+# Roughly chest/head height, so a referral reveal frames the person, not the ground.
+const REFERRAL_AIM_HEIGHT := 1.6
 const QUESTION_FLASH_SECONDS := 1.2
 
 
 func _ready() -> void:
+	if not _all.has(self):
+		_all.append(self)
 	_build_visuals()
 	_build_detection_area()
 
 
+func _exit_tree() -> void:
+	_all.erase(self)
+	if _active == self:
+		_active = null
+
+
 func setup(dialogue: DialogueManager, camera_focus: CameraFocusManager,
 		player: PlayerController, goal_manager: GoalManager,
-		goals: Dictionary, goal_names: Array, speech: SpeechInput) -> void:
+		destination_director: DestinationDirectorScript, goals: Dictionary,
+		goal_names: Array[String], speech: SpeechInput) -> void:
 	_dialogue = dialogue
 	_camera_focus = camera_focus
 	_player = player
 	_goal_manager = goal_manager
+	_destination_director = destination_director
 	_goals = goals
 	_goal_names = goal_names
 	_speech = speech
@@ -358,6 +399,10 @@ func _update_walk(delta: float) -> void:
 # Conversation state machine (speech or the E key)
 # -----------------------------------------------------------------------------
 func _begin_greet() -> void:
+	# The player has walked up to a townsperson, so the opening tutorial hint has
+	# served its purpose and fades out.
+	if _dialogue != null:
+		_dialogue.hide_tutorial_hint()
 	_state = State.GREET
 	_hint.visible = true     # show the "!" marker
 	_speech.listen()
@@ -433,7 +478,11 @@ func _on_heard(text: String) -> void:
 				if dest != "":
 					break
 		if dest != "":
-			_deliver(dest)
+			var referral := _find_nearby_referral()
+			if _destination_director.should_refuse(dest, referral != null):
+				_refuse_and_refer(referral)
+			else:
+				_deliver(dest)
 		elif had_where_is:
 			_dialogue.speak("Sorry, I don't know that place.", voice_pitch, voice_rate, voice_index, voice_family)
 			_dialogue.show_text(npc_name, "Sorry, I don't know that place.")
@@ -464,6 +513,8 @@ func _deliver_directions_only(dest_name: String) -> void:
 
 
 func _deliver(dest_name: String) -> void:
+	_destination_director.note_directions_given(dest_name)
+	clear_referral_history()   # the question is answered; everyone knows again
 	_state = State.IDLE
 	_speech.stop()
 	_hint.visible = false
@@ -491,6 +542,72 @@ func _deliver(dest_name: String) -> void:
 	elif _active == self:
 		_active = null
 		_state = State.IDLE
+
+
+func _find_nearby_referral() -> NPCInteraction:
+	var nearest: NPCInteraction = null
+	var nearest_distance := INF
+	for npc: NPCInteraction in _all:
+		if npc == self or not is_instance_valid(npc) or not npc.is_inside_tree():
+			continue
+		if _recent_refusers.has(npc):
+			continue   # they already refused; sending the player back is a dead end
+		var distance := global_position.distance_to(npc.global_position)
+		if distance < 15.0 or distance > 45.0:
+			continue
+		if distance < nearest_distance:
+			nearest = npc
+			nearest_distance = distance
+	return nearest
+
+
+func _refuse_and_refer(referral: NPCInteraction) -> void:
+	_state = State.IDLE
+	_speech.stop()
+	_hint.visible = false
+	_query.visible = false
+	_set_mic_state(MicState.OFF)
+	_dialogue.hide_text_input()
+	_player.set_input_enabled(false)
+
+	# Hold the referred townsperson still, so the reveal frames them instead of
+	# an empty stretch of sidewalk they have already walked off.
+	var referral_was_conversing := referral._conversing
+	referral._conversing = true
+
+	# Aim at their upper body: an NPC node sits at ground level, so panning to
+	# global_position alone would centre the shot on their feet.
+	var aim := Node3D.new()
+	referral.add_child(aim)
+	aim.position = Vector3(0, REFERRAL_AIM_HEIGHT, 0)
+
+	# Remember this refusal so nobody refers the player straight back here.
+	if not _recent_refusers.has(self):
+		_recent_refusers.append(self)
+		while _recent_refusers.size() > REFUSER_MEMORY:
+			_recent_refusers.remove_at(0)
+
+	var reply := "I don't know. Ask her." if referral.female else "I don't know. Ask him."
+	var reply_jp := "わからないなあ。彼女に聞いてみて。" if referral.female \
+			else "わからないなあ。彼に聞いてみて。"
+	_dialogue.speak(reply, voice_pitch, voice_rate, voice_index, voice_family)
+	_dialogue.show_text(npc_name, reply, reply_jp)
+	await _face_target(referral)
+	await _raise_arm()
+	# Same reveal the destination pointing uses: pan out, hold, pan back.
+	await _camera_focus.pan_to(aim, global_position)
+	await get_tree().create_timer(POINT_HOLD_SECONDS).timeout
+	await _camera_focus.pan_back()
+	await _lower_arm()
+
+	aim.queue_free()
+	referral._conversing = referral_was_conversing
+
+	_dialogue.hide_dialogue()
+	_player.set_input_enabled(true)
+	_conversing = false
+	if _active == self:
+		_active = null
 
 
 func _reset() -> void:

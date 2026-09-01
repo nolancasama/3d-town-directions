@@ -37,23 +37,30 @@ entirely with the keyboard.
 
 ## How to play
 
-There's a townsperson on **every street** (about a dozen, some patrolling). Walk
-up to **any** of them and the conversation is **by voice** (in the browser
-build). Each gives directions **from its own location**, so the same place gets
-a different hint depending on which NPC you ask.
+After the opening, choose one of **three destinations**. Your choice appears in
+the **DESTINATION** card at the top-left. Choosing does not give you directions:
+you still need to ask a townsperson.
 
-1. Get close — the **microphone turns on** and a prompt floats over that NPC.
-2. Say **"Excuse me."** → the NPC answers **"Yes?"**
-3. Say **"Where is the &lt;place&gt;?"** (e.g. *"Where is the library?"*). The NPC
-   gives a compass hint, turns to **face and point** at that building, and the
-   camera reveals it for ~2 seconds.
-4. Follow the streets there. On arrival, **"Correct! You found the …"** shows and
-   your score goes up. Walk back to the NPC to ask for another.
+1. Walk close to an NPC. The microphone turns on and **!** appears.
+2. Say **"Excuse me."** The NPC answers **"Yes?"**
+3. Say **"Where is the &lt;place&gt;?"** using the exact place in your destination
+   card, such as *"Where is the library?"*
+4. The NPC points, the camera shows the place, and directions begin. Sometimes
+   the NPC says **"I don't know. Ask him/her."** and points to another nearby
+   NPC. Ask that person the same question.
+5. Follow the streets to the assigned place. After the arrival celebration,
+   choose your next destination from a new set of three.
+
+You can also ask about another place while exploring. You still discover it,
+but your assigned destination stays the same and the trip does not advance.
+Sometimes, after an arrival, the character says **"I'm thirsty!"**,
+**"I'm hungry!"**, or **"I'm tired!"** The next three choices will be places
+that can help. There are no need meters.
 
 **Keyboard fallback** (desktop editor, or if the mic is unavailable/denied):
-press **E** to greet, then **E** again to pick the destination from the
-scrollable menu (arrow keys + `Enter`). The voice and keyboard paths drive the
-same flow.
+use the arrow keys and `Enter` or `Space` in the three-choice screen. Press
+**E** to greet an NPC, then type **"Where is the &lt;place&gt;?"** and press
+`Enter`. The voice and keyboard paths drive the same flow.
 
 > Speech recognition uses the browser's **Web Speech API** (Chrome/Chromebooks)
 > and only works in a **web build served over HTTPS or localhost**. The

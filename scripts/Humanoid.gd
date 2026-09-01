@@ -20,6 +20,7 @@ extends Node3D
 @export var pants_color: Color = Color(0.25, 0.25, 0.30)
 @export var hair_color: Color = Color(0.25, 0.16, 0.10)
 @export var shoe_color: Color = Color(0.12, 0.12, 0.12)
+@export var female: bool = false
 
 # Limb pivots. Legs hang from the hips, arms from the shoulders; rotating a
 # pivot on X swings that limb forward/back. right_arm_pivot is also used by the
@@ -28,6 +29,8 @@ var left_leg_pivot: Node3D
 var right_leg_pivot: Node3D
 var left_arm_pivot: Node3D
 var right_arm_pivot: Node3D
+
+var _mat_cache: Dictionary = {}
 
 # --- Walk animation ----------------------------------------------------------
 # Enable on characters that walk (the player). The controller feeds in the
@@ -41,6 +44,7 @@ var _phase: float = 0.0
 
 func _ready() -> void:
 	_build()
+	_bake()
 
 
 func _build() -> void:
@@ -51,13 +55,41 @@ func _build() -> void:
 	_leg_limb(right_leg_pivot)
 
 	# --- Pelvis / torso ----------------------------------------------------
-	_box(Vector3(0.42, 0.25, 0.26), Vector3(0, 0.92, 0), pants_color)        # hips
-	_box(Vector3(0.46, 0.62, 0.28), Vector3(0, 1.32, 0), shirt_color)        # chest
+	if female:
+		# Cylindrical torso — blends with the cylindrical skirt below.
+		var tm := MeshInstance3D.new()
+		var tcym := CylinderMesh.new()
+		tcym.top_radius = 0.18
+		tcym.bottom_radius = 0.20
+		tcym.height = 0.62
+		tm.mesh = tcym
+		tm.position = Vector3(0, 1.32, 0)
+		tm.material_override = _mat(shirt_color)
+		add_child(tm)
+	else:
+		_box(Vector3(0.46, 0.62, 0.28), Vector3(0, 1.32, 0), shirt_color)    # chest
+
+	if female:
+		# Skirt: tapered CylinderMesh, tight at waist, flared at hem.
+		# Replaces the hip box — covers waist-to-thigh entirely.
+		var sm := MeshInstance3D.new()
+		var scym := CylinderMesh.new()
+		scym.top_radius = 0.18
+		scym.bottom_radius = 0.27
+		scym.height = 0.82
+		sm.mesh = scym
+		sm.position = Vector3(0, 0.60, 0)
+		sm.material_override = _mat(pants_color)
+		add_child(sm)
+	else:
+		_box(Vector3(0.42, 0.25, 0.26), Vector3(0, 0.92, 0), pants_color)    # hips
 
 	# --- Arms (on shoulder pivots) -----------------------------------------
 	# Shoulders are level with the TOP of the torso (chest top = 1.32 + 0.62/2).
-	left_arm_pivot = _pivot(Vector3(-0.30, 1.63, 0))
-	right_arm_pivot = _pivot(Vector3(0.30, 1.63, 0))
+	# Female cylinder top_radius=0.18, so pull the pivots in to meet the edge.
+	var arm_x := 0.21 if female else 0.30
+	left_arm_pivot = _pivot(Vector3(-arm_x, 1.63, 0))
+	right_arm_pivot = _pivot(Vector3(arm_x, 1.63, 0))
 	_arm_limb(left_arm_pivot)
 	_arm_limb(right_arm_pivot)
 
@@ -65,10 +97,21 @@ func _build() -> void:
 	_box(Vector3(0.12, 0.1, 0.12), Vector3(0, 1.68, 0), skin_color)          # neck
 	_sphere(0.16, Vector3(0, 1.84, 0), skin_color)                           # head
 
-	# Hair: a cap on the top/back of the head, with the hairline raised above the
-	# eyes (pulled up and back so it doesn't hang over the brow).
+	# Hair: a cap on the top/back of the head.
 	var hair := _sphere(0.17, Vector3(0, 1.95, 0.02), hair_color)
 	hair.scale = Vector3(1.0, 0.8, 0.95)
+	if female:
+		# Long hair: tapered CylinderMesh — tiny top_radius tucks into the scalp
+		# sphere so it appears to grow out of the head; wider at the bottom.
+		var hm := MeshInstance3D.new()
+		var hcym := CylinderMesh.new()
+		hcym.top_radius = 0.10
+		hcym.bottom_radius = 0.14
+		hcym.height = 0.85
+		hm.mesh = hcym
+		hm.position = Vector3(0, 1.455, 0.12)
+		hm.material_override = _mat(hair_color)
+		add_child(hm)
 
 	# Eyes (white with a smaller dark pupil) set into the -Z front face — small
 	# enough that they sit on the head instead of bulging out.
@@ -173,6 +216,48 @@ func _sphere(radius: float, pos: Vector3, color: Color) -> MeshInstance3D:
 
 
 func _mat(color: Color) -> StandardMaterial3D:
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = color
-	return mat
+	if not _mat_cache.has(color):
+		var mat := StandardMaterial3D.new()
+		mat.albedo_color = color
+		_mat_cache[color] = mat
+	return _mat_cache[color]
+
+
+func _bake() -> void:
+	_bake_group(self)
+	for child in get_children():
+		if child is Node3D and not child is MeshInstance3D:
+			_bake_group(child)
+
+
+func _bake_group(parent: Node3D) -> void:
+	var meshes: Array = []
+	for child in parent.get_children():
+		if child is MeshInstance3D:
+			meshes.append(child)
+	if meshes.size() < 2:
+		return
+	var tools: Dictionary = {}
+	var order: Array = []
+	for mi: MeshInstance3D in meshes:
+		var mat: Material = mi.material_override
+		if mat == null or mi.mesh == null:
+			continue
+		if not tools.has(mat):
+			var st := SurfaceTool.new()
+			st.begin(Mesh.PRIMITIVE_TRIANGLES)
+			tools[mat] = st
+			order.append(mat)
+		tools[mat].append_from(mi.mesh, 0, mi.transform)
+		mi.queue_free()
+	if order.is_empty():
+		return
+	var arr_mesh := ArrayMesh.new()
+	for mat in order:
+		tools[mat].commit(arr_mesh)
+		arr_mesh.surface_set_material(arr_mesh.get_surface_count() - 1, mat)
+	var inst := MeshInstance3D.new()
+	inst.mesh = arr_mesh
+	inst.visibility_range_end = 70.0
+	inst.visibility_range_end_margin = 4.0
+	parent.add_child(inst)

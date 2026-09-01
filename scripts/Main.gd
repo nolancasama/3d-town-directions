@@ -1,4 +1,4 @@
-﻿extends Node3D
+extends Node3D
 # =============================================================================
 # Main.gd  -  Bootstrap / TownBuilder
 # -----------------------------------------------------------------------------
@@ -14,6 +14,8 @@
 # Everything is primitive geometry. Buildings are authored in LOCAL space with
 # their front on +Z, then rotated so the front faces the nearest street.
 # =============================================================================
+
+const DestinationDirectorScript := preload("res://scripts/DestinationDirector.gd")
 
 # --- Street grid -------------------------------------------------------------
 # 5x5 blocks of 64 units. Buildings are packed into each block (see
@@ -122,6 +124,8 @@ var _shingle_cache: Dictionary = {}      # color -> roof-shingle StandardMateria
 var _flat_roof_cache: Dictionary = {}   # color -> flat-roof gravel StandardMaterial3D
 var _ripple_cache: Dictionary = {}      # color -> water-ripple StandardMaterial3D
 var _vpaint_cache: Dictionary = {}     # color -> shiny vehicle paint StandardMaterial3D
+var _chainlink_material: StandardMaterial3D = null   # shared chain-link fence material
+var _flag_material: StandardMaterial3D = null        # shared American flag material
 var _brick_wall_color: Color = Color.TRANSPARENT
 var _brick_light_wall_color: Color = Color.TRANSPARENT
 var _brick_white_wall_color: Color = Color.TRANSPARENT
@@ -159,6 +163,7 @@ var _im_l0: Vector3
 var _im_l1: Vector3
 
 var _dialogue: DialogueManager
+var _destination_director: DestinationDirectorScript
 var _bgm_player: AudioStreamPlayer
 var _bus_ref: Node3D
 var _bus_origin_x: float
@@ -203,7 +208,7 @@ func _ready() -> void:
 	_sand_tex     = _make_sand_tex()
 	_build_roads()
 	var goals: Dictionary = {}
-	var goal_names: Array = []
+	var goal_names: Array[String] = []
 	var layout := _layout_buildings()
 	_build_town(layout, goals, goal_names)
 	# Train Station goal is the new north platform (not a grid block building).
@@ -285,6 +290,8 @@ func _ready() -> void:
 
 	var goal := GoalManager.new()
 	add_child(goal)
+	_destination_director = DestinationDirectorScript.new()
+	add_child(_destination_director)
 
 	# One shared microphone/recognizer for every NPC (only the nearest listens).
 	var speech := SpeechInput.new()
@@ -293,8 +300,11 @@ func _ready() -> void:
 	camera_focus.setup(player.camera)
 	goal.setup(player, _dialogue, camera_focus, _icon_nodes)
 	_dialogue.init_discovery(goal_names.size())
+	_destination_director.setup(_dialogue, goal, player, goal_names,
+			Callable(self, "_set_npc_interaction_suppressed"))
 
-	_spawn_npcs(_dialogue, camera_focus, player, goal, goals, goal_names, speech)
+	_spawn_npcs(_dialogue, camera_focus, player, goal, _destination_director,
+			goals, goal_names, speech)
 	_spawn_posters(goals, player, layout, goal)
 	_spawn_welcome_sign(player, goal)
 	_play_intro(player)
@@ -435,7 +445,10 @@ func _play_intro(player: PlayerController) -> void:
 			player.visible = false
 			_intro_cam.queue_free()
 			_intro_cam = null
-			get_tree().quit()
+			if OS.has_feature("web"):
+				JavaScriptBridge.eval("window.location.reload()", true)
+			else:
+				get_tree().quit()
 			return
 
 	# 7) Matsubara thanks the player.
@@ -458,6 +471,7 @@ func _play_intro(player: PlayerController) -> void:
 	player.camera.current = true
 	player.set_input_enabled(true)
 	_dialogue.show_discovery_panel()
+	await _destination_director.start()
 	_fade_out_bgm()
 	_setup_train_schedule()
 
@@ -472,6 +486,10 @@ func _fade_out_bgm() -> void:
 	if is_instance_valid(_bgm_player):
 		_bgm_player.stop()
 	_start_ambient()
+
+
+func _set_npc_interaction_suppressed(suppressed: bool) -> void:
+	NPCInteraction.set_interaction_suppressed(suppressed)
 
 
 func _start_ambient() -> void:
@@ -918,7 +936,8 @@ func _build_intro_bus() -> Node3D:
 # from its own position; they share the one microphone.
 func _spawn_npcs(dialogue: DialogueManager, camera_focus: CameraFocusManager,
 		player: PlayerController, goal: GoalManager,
-		goals: Dictionary, goal_names: Array, speech: SpeechInput) -> void:
+		destination_director: DestinationDirectorScript, goals: Dictionary,
+		goal_names: Array[String], speech: SpeechInput) -> void:
 	var palette := [
 		[Color(0.80, 0.30, 0.25), Color(0.20, 0.20, 0.25), Color(0.10, 0.08, 0.05)],
 		[Color(0.20, 0.45, 0.65), Color(0.30, 0.28, 0.25), Color(0.35, 0.22, 0.10)],
@@ -988,7 +1007,8 @@ func _spawn_npcs(dialogue: DialogueManager, camera_focus: CameraFocusManager,
 			var voice_idx: int = (k % 3) if is_female else (3 + k % 6)
 			var combo: Array = voice_combos[voice_idx]
 			_make_npc(npos, p, palette[k % palette.size()],
-					dialogue, camera_focus, player, goal, goals, goal_names, speech,
+					dialogue, camera_focus, player, goal, destination_director,
+					goals, goal_names, speech,
 					nn, combo[1], 0.88, k, combo[0], is_female, hs)
 			k += 1
 	# One NPC on each outer boundary sidewalk.
@@ -1005,7 +1025,8 @@ func _spawn_npcs(dialogue: DialogueManager, camera_focus: CameraFocusManager,
 	_make_npc(Vector3(0, plat_y, plat_z),
 			PackedVector3Array([Vector3(-8, plat_y, plat_z), Vector3(8, plat_y, plat_z)]),
 			palette[k % palette.size()],
-			dialogue, camera_focus, player, goal, goals, goal_names, speech,
+			dialogue, camera_focus, player, goal, destination_director,
+			goals, goal_names, speech,
 			"Townsperson", _pvc[1], 0.88, k, _pvc[0], _pf, _ph)
 	k += 1
 	# South outer sidewalk: patrol in the gap between the two center beach benches
@@ -1017,7 +1038,8 @@ func _spawn_npcs(dialogue: DialogueManager, camera_focus: CameraFocusManager,
 	_make_npc(Vector3(0, 0, outer_z),
 			PackedVector3Array([Vector3(-14, 0, outer_z), Vector3(14, 0, outer_z)]),
 			palette[k % palette.size()],
-			dialogue, camera_focus, player, goal, goals, goal_names, speech,
+			dialogue, camera_focus, player, goal, destination_director,
+			goals, goal_names, speech,
 			"Townsperson", _svc[1], 0.88, k, _svc[0], _sf, _sh)
 	k += 1
 	# West outer sidewalk (patrols north-south at x = -outer_x)
@@ -1028,7 +1050,8 @@ func _spawn_npcs(dialogue: DialogueManager, camera_focus: CameraFocusManager,
 	_make_npc(Vector3(-outer_x, 0, 0),
 			PackedVector3Array([Vector3(-outer_x, 0, -40), Vector3(-outer_x, 0, 40)]),
 			palette[k % palette.size()],
-			dialogue, camera_focus, player, goal, goals, goal_names, speech,
+			dialogue, camera_focus, player, goal, destination_director,
+			goals, goal_names, speech,
 			"Townsperson", _wvc[1], 0.88, k, _wvc[0], _wf, _wh)
 	k += 1
 	# East outer sidewalk (patrols north-south at x = +outer_x)
@@ -1039,14 +1062,16 @@ func _spawn_npcs(dialogue: DialogueManager, camera_focus: CameraFocusManager,
 	_make_npc(Vector3(outer_x, 0, 0),
 			PackedVector3Array([Vector3(outer_x, 0, -40), Vector3(outer_x, 0, 40)]),
 			palette[k % palette.size()],
-			dialogue, camera_focus, player, goal, goals, goal_names, speech,
+			dialogue, camera_focus, player, goal, destination_director,
+			goals, goal_names, speech,
 			"Townsperson", _evc[1], 0.88, k, _evc[0], _ef, _enh)
 
 
 func _make_npc(pos: Vector3, p: PackedVector3Array, c: Array,
 		dialogue: DialogueManager, camera_focus: CameraFocusManager,
 		player: PlayerController, goal: GoalManager,
-		goals: Dictionary, goal_names: Array, speech: SpeechInput,
+		destination_director: DestinationDirectorScript, goals: Dictionary,
+		goal_names: Array[String], speech: SpeechInput,
 		npc_name: String = "Townsperson",
 		voice_pitch: float = 1.0, voice_rate: float = 0.88,
 		voice_index: int = 0, voice_family: String = "female",
@@ -1066,7 +1091,8 @@ func _make_npc(pos: Vector3, p: PackedVector3Array, c: Array,
 	npc.voice_index = voice_index
 	npc.voice_family = voice_family
 	add_child(npc)
-	npc.setup(dialogue, camera_focus, player, goal, goals, goal_names, speech)
+	npc.setup(dialogue, camera_focus, player, goal, destination_director,
+			goals, goal_names, speech)
 	return npc
 
 
@@ -1092,7 +1118,7 @@ func _spawn_posters(goals: Dictionary, player: PlayerController, layout: Array, 
 	# have no real wall to mount a poster on.
 	var hosts: Array = []
 	for name in goals.keys():
-		if name in ["Train Station", "Beach", "Shopping Mall", "Park"]:
+		if name in ["Train Station", "Beach", "Shopping Mall", "Park", "School"]:
 			continue
 		if not GOAL_DEFS.has(name):
 			continue
@@ -1978,11 +2004,29 @@ func _lamps_in_gaps(layout: Array, vertical: bool, line: float, s: float, perp: 
 	while t <= EXT - 14.0:
 		var spot := _nearest_open(blocked, t, 7.0)
 		if spot < 1.0e8 and not _near_grid(spot, 7.0):
-			if vertical:
-				_add_lamppost(_roads, Vector3(perp, 0, spot))
-			else:
-				_add_lamppost(_roads, Vector3(spot, 0, perp))
+			var wx: float = perp if vertical else spot
+			var wz: float = spot if vertical else perp
+			if not _lamp_removed(wx, wz):
+				if vertical:
+					_add_lamppost(_roads, Vector3(perp, 0, spot))
+				else:
+					_add_lamppost(_roads, Vector3(spot, 0, perp))
 		t += 24.0
+
+
+# The School's single block-wide footprint makes both the south- and east-street
+# scans each drop a "corner gap" lamp within a unit of one another at its SE
+# corner, reading as one duplicated lamp. Drop the redundant one (from the east/
+# N-S scan) and keep the one on the main south-facing entrance street.
+const REMOVED_LAMP_SPOTS := [Vector2(-34.0, -88.0)]
+
+func _lamp_removed(x: float, z: float) -> bool:
+	# Tight tolerance: the surviving lamp on the adjacent street sits only 1 unit
+	# away, so anything looser would remove both instead of just this one.
+	for p in REMOVED_LAMP_SPOTS:
+		if absf(p.x - x) < 0.4 and absf(p.y - z) < 0.4:
+			return true
+	return false
 
 
 func _covered(intervals: Array, v: float) -> bool:
@@ -2042,7 +2086,7 @@ func _near_grid(v: float, r: float) -> bool:
 # -----------------------------------------------------------------------------
 # Town: spawn every building, collecting the goals into a name->node dictionary.
 # -----------------------------------------------------------------------------
-func _build_town(layout: Array, goals: Dictionary, goal_names: Array) -> void:
+func _build_town(layout: Array, goals: Dictionary, goal_names: Array[String]) -> void:
 	var town := Node3D.new()
 	town.name = "Town"
 	add_child(town)
@@ -2069,7 +2113,8 @@ func _build_town(layout: Array, goals: Dictionary, goal_names: Array) -> void:
 		# their inner-street facing (their door/goal_spot logic depends on it).
 		# Filler houses face the nearest road they have a clear path to, so none
 		# end up staring at a neighbour's back wall.
-		if cfg.style == "park":
+		if cfg.style == "park" or cfg.style == "school_complex":
+			# Built axis-aligned in local space (door faces local +Z), so no facing turn.
 			node.rotation.y = 0.0
 		elif cfg.get("goal", false):
 			node.rotation.y = _park_or_street_facing(cfg.pos)
@@ -2106,8 +2151,10 @@ func _build_town(layout: Array, goals: Dictionary, goal_names: Array) -> void:
 			node.set_meta("goal_seg_half", HALF_BLOCK - HALF)
 			# Where the building's name label floats once it's been found: a sign
 			# just above the door, on the front face.
-			node.set_meta("label_pos", node.global_position
-					+ Vector3(0, size.y + 5.0, 0))
+			var lbl_off := Vector3(0, size.y + 5.0, 0)
+			if cfg.style == "school_complex":
+				lbl_off.z = 13.0   # float above the south wing, not the playground
+			node.set_meta("label_pos", node.global_position + lbl_off)
 			goals[cfg.name] = node
 			goal_names.append(cfg.name)
 			# Buildings with facade icons (cross, burger) — added as hidden nodes
@@ -2141,6 +2188,13 @@ func _layout_buildings() -> Array:
 			if gname == "Park":
 				out.append({"name": "Park", "pos": Vector3(0, 0, 0), "size": Vector3(40, 0.08, 40),
 						"color": Color(0.30, 0.55, 0.27), "style": "park", "goal": true})
+				continue
+			# The School takes over its whole block: an L-shaped building on the two
+			# downtown-facing sides, a fenced playground in the back. No filler ring.
+			if gname == "School":
+				out.append({"name": "School", "pos": Vector3(cx, 0, cz),
+						"size": Vector3(36, 8, 36), "style": "school_complex",
+						"color": GOAL_DEFS["School"].color, "goal": true})
 				continue
 			var placed := []
 			if gname != "":
@@ -2513,6 +2567,8 @@ func _spawn_building(cfg: Dictionary) -> Node3D:
 			_build_station(body, size, color, accent)
 		"gas":
 			_build_gas(body, size)
+		"school_complex":
+			_build_school_complex(body, color)
 		"house":
 			# 0–25 % brick, 25–50 % siding, 50–100 % speckle.
 			var brng := RandomNumberGenerator.new()
@@ -2541,7 +2597,8 @@ func _spawn_building(cfg: Dictionary) -> Node3D:
 
 	# Most styles want a solid collision box covering the full footprint.
 	# Park stays walkable. Gas station gets per-piece boxes matching its visual geometry.
-	if style != "park" and style != "gas":
+	# The school complex adds its own per-wing + per-fence colliders (playground walkable).
+	if style != "park" and style != "gas" and style != "school_complex":
 		_collide(body, size)
 	elif style == "gas":
 		_collide_gas(body, size)
@@ -2979,6 +3036,233 @@ func _build_pool(body: Node3D, size: Vector3, deck: Color, water: Color) -> void
 		_cylinder(body, 0.1, 1.4, Vector3(-size.x * 0.5 + size.x * t, 0.7, size.z * 0.5), Color(0.7, 0.7, 0.72))
 
 
+# The School occupies its entire block. Built axis-aligned in local space (block
+# centre = origin, door faces local +Z toward downtown):
+#   * L-shaped brick building hugging the +X (east) and +Z (south) edges — the two
+#     sides that face the streets/downtown.
+#   * A fenced playground filling the back NW quadrant, enclosed by the building on
+#     two sides and a chain-link fence on the other two (north + west).
+func _build_school_complex(body: Node3D, color: Color) -> void:
+	const H := 18.0          # half-extent of the block's buildable square
+	const D := 10.0          # wing depth
+	const BH := 8.0          # building height
+	const FH := 2.3          # fence height
+	const SPAN := 2.0 * H - D # inner span shared by playground edge / fence (26)
+	var roof_col := Color(0.30, 0.16, 0.13)
+	var win_col := Color(0.62, 0.80, 0.90)
+	var metal := Color(0.62, 0.64, 0.66)
+
+	# --- L-shaped building (brick-textured walls) -----------------------------
+	var e_ctr := Vector3(H - D * 0.5, BH * 0.5, 0.0)     # east wing centre  (13,4,0)
+	var e_size := Vector3(D, BH, 2.0 * H)                # (10,8,36)
+	var s_ctr := Vector3(-D * 0.5, BH * 0.5, H - D * 0.5) # south wing centre (-5,4,13)
+	var s_size := Vector3(2.0 * H - D, BH, D)            # (26,8,10)
+	_brick_wall_color = color
+	_box(body, e_size, e_ctr, color)
+	_box(body, s_size, s_ctr, color)
+	_brick_wall_color = Color.TRANSPARENT
+
+	# Flat roofs, slight overhang, darker.
+	_box(body, Vector3(e_size.x + 1.0, 0.5, e_size.z + 1.0), Vector3(e_ctr.x, BH + 0.25, e_ctr.z), roof_col)
+	_box(body, Vector3(s_size.x + 1.0, 0.5, s_size.z + 1.0), Vector3(s_ctr.x, BH + 0.25, s_ctr.z), roof_col)
+
+	# Windows — two floors, on BOTH the outward street-facing wall and the inward
+	# wall facing the playground. Frame + glass are pushed outward from the wall's
+	# own face (mirroring the generic _windows() trick) so they never sit exactly
+	# coplanar with the wall mesh — coplanar faces z-fight and can flicker invisible,
+	# which is why the previous single flush-mounted row wasn't visible at all.
+	var floor_ys := [2.6, 5.6]
+	var s_half: float = s_size.z * 0.5   # 5.0 — south wing thickness half
+	var e_half: float = e_size.x * 0.5   # 5.0 — east wing thickness half
+	var s_xs := [-15.0, -11.0, -7.0, -3.2, 3.2, 7.0]              # south wing, door-clear
+	var e_zs_front := [-14.0, -10.0, -6.0, -2.0, 2.0, 6.0, 10.0, 14.0]
+	var e_zs_back := [-14.0, -10.0, -6.0, -2.0, 2.0, 6.0]         # clear of the south-wing corner
+	for fy in floor_ys:
+		for wx in s_xs:
+			_school_window(body, Vector3(wx, fy, s_ctr.z + s_half), false, 1.0, win_col)   # front (street)
+			_school_window(body, Vector3(wx, fy, s_ctr.z - s_half), false, -1.0, win_col)  # back (playground)
+		for wz in e_zs_front:
+			_school_window(body, Vector3(e_ctr.x + e_half, fy, wz), true, 1.0, win_col)    # front (street)
+		for wz in e_zs_back:
+			_school_window(body, Vector3(e_ctr.x - e_half, fy, wz), true, -1.0, win_col)   # back (playground)
+		# East wing's south END CAP (z=H, x:8..18) — the outer corner of the L that
+		# closes off the front elevation. Without these it read as a blank patch of
+		# wall next to the south wing's windows.
+		for wx in [10.3, 15.2]:
+			_school_window(body, Vector3(wx, fy, H), false, 1.0, win_col)
+
+	# Main entrance on the south wing (+Z) at x=0, with a stoop and a flagpole
+	# flying the American flag (procedurally textured, twice the old pole height).
+	_box(body, Vector3(3.0, 4.5, 0.4), Vector3(0.0, 2.25, H - 0.1), Color(0.35, 0.22, 0.16))
+	_box(body, Vector3(4.0, 0.3, 1.6), Vector3(0.0, 0.15, H + 0.7), Color(0.70, 0.70, 0.72))
+	var pole_h := 18.0
+	_cylinder(body, 0.14, pole_h, Vector3(5.0, pole_h * 0.5, H + 1.2), Color(0.85, 0.85, 0.88))
+	# QuadMesh (not a thin box) so both sides share the SAME UV space: viewed from
+	# behind you see a correctly mirrored flag, never the box's separate/blank
+	# end-cap faces that were showing as solid canton on the reverse side.
+	var flag_mesh := MeshInstance3D.new()
+	var flag_quad := QuadMesh.new()
+	flag_quad.size = Vector2(2.6, 1.4)
+	flag_mesh.mesh = flag_quad
+	flag_mesh.position = Vector3(6.4, pole_h - 1.4, H + 1.2)
+	flag_mesh.material_override = _us_flag_mat()
+	body.add_child(flag_mesh)
+
+	# --- Playground (back NW quadrant), centred at (-5,-5) ---------------------
+	_box(body, Vector3(SPAN, 0.06, SPAN), Vector3(-5.0, 0.03, -5.0), Color(0.82, 0.70, 0.48))
+
+	# Swing set.
+	for px in [-13.0, -9.0]:
+		_cylinder(body, 0.1, 2.6, Vector3(px, 1.3, -10.0), metal)
+	var swing_bar := _cylinder(body, 0.1, 4.2, Vector3(-11.0, 2.5, -10.0), metal)
+	swing_bar.rotation.z = PI * 0.5
+	for so in [-1.0, 1.0]:
+		_box(body, Vector3(0.05, 1.4, 0.05), Vector3(-11.0 + so, 1.75, -10.0), Color(0.2, 0.2, 0.2))
+		_box(body, Vector3(0.6, 0.08, 0.28), Vector3(-11.0 + so, 1.05, -10.0), Color(0.15, 0.15, 0.20))
+	# Slide.
+	_box(body, Vector3(2.0, 0.2, 2.0), Vector3(1.0, 2.0, -12.0), Color(0.75, 0.35, 0.30))
+	for lx in [-0.8, 0.8]:
+		for lz in [-0.8, 0.8]:
+			_cylinder(body, 0.08, 2.0, Vector3(1.0 + lx, 1.0, -12.0 + lz), metal)
+	var slide := _box(body, Vector3(0.9, 0.12, 3.4), Vector3(1.0, 1.25, -9.9), Color(0.90, 0.80, 0.20))
+	slide.rotation.x = deg_to_rad(38)
+	# Seesaw.
+	_cylinder(body, 0.25, 0.8, Vector3(-12.0, 0.4, 1.0), metal)
+	var plank := _box(body, Vector3(4.6, 0.15, 0.5), Vector3(-12.0, 0.9, 1.0), Color(0.85, 0.55, 0.20))
+	plank.rotation.z = deg_to_rad(8)
+	# Sandbox.
+	for f in [[-1.6, 0.0, 0.3, 3.4], [1.6, 0.0, 0.3, 3.4], [0.0, -1.6, 3.4, 0.3], [0.0, 1.6, 3.4, 0.3]]:
+		_box(body, Vector3(f[2], 0.35, f[3]), Vector3(3.0 + f[0], 0.17, -1.0 + f[1]), Color(0.55, 0.38, 0.22))
+	_box(body, Vector3(3.0, 0.12, 3.0), Vector3(3.0, 0.1, -1.0), Color(0.90, 0.82, 0.60))
+
+	# --- Chain-link fence on the two back sides (north z=-H, west x=-H) --------
+	for i in 9:
+		var t := float(i) / 8.0
+		_cylinder(body, 0.11, FH + 0.2, Vector3(-H, (FH + 0.2) * 0.5, -H + SPAN * t), metal)
+		_cylinder(body, 0.11, FH + 0.2, Vector3(-H + SPAN * t, (FH + 0.2) * 0.5, -H), metal)
+	var west_rail := _cylinder(body, 0.06, SPAN, Vector3(-H, FH, -H + SPAN * 0.5), metal)
+	west_rail.rotation.x = PI * 0.5
+	var north_rail := _cylinder(body, 0.06, SPAN, Vector3(-H + SPAN * 0.5, FH, -H), metal)
+	north_rail.rotation.z = PI * 0.5
+	_fence_panel(body, Vector2(SPAN, FH), Vector3(-H + SPAN * 0.5, FH * 0.5, -H), 0.0)      # north
+	_fence_panel(body, Vector2(SPAN, FH), Vector3(-H, FH * 0.5, -H + SPAN * 0.5), PI * 0.5) # west
+
+	# --- Colliders (playground interior stays walkable) -----------------------
+	_add_box_collider(body, e_size, e_ctr)
+	_add_box_collider(body, s_size, s_ctr)
+	_add_box_collider(body, Vector3(0.3, FH, SPAN), Vector3(-H, FH * 0.5, -H + SPAN * 0.5))
+	_add_box_collider(body, Vector3(SPAN, FH, 0.3), Vector3(-H + SPAN * 0.5, FH * 0.5, -H))
+	# Stoop — only 0.3 tall, well under the player capsule's 0.4 radius, so the
+	# bottom sphere contacts its top face first and the player steps up onto it
+	# naturally (same mechanic as the sidewalk curbs) instead of walking through it.
+	_add_box_collider(body, Vector3(4.0, 0.3, 1.6), Vector3(0.0, 0.15, H + 0.7))
+
+
+func _add_box_collider(body: Node3D, size: Vector3, pos: Vector3) -> void:
+	var col := CollisionShape3D.new()
+	var shape := BoxShape3D.new()
+	shape.size = size
+	col.shape = shape
+	col.position = pos
+	body.add_child(col)
+
+
+# A frame+glass window pair pushed outward along the wall's own normal (away
+# from the face) by a small epsilon so it never sits coplanar with the wall
+# mesh — coplanar geometry z-fights and can flicker invisible.
+func _school_window(body: Node3D, pos: Vector3, faces_x: bool, dir_sign: float, win_col: Color) -> void:
+	var frame := _mat(Color(0.20, 0.20, 0.22))
+	var glass := _glass(win_col)
+	if faces_x:
+		_box_mat(body, Vector3(0.06, 1.7, 1.15), pos + Vector3(dir_sign * 0.04, 0, 0), frame)
+		_box_mat(body, Vector3(0.12, 1.45, 0.95), pos + Vector3(dir_sign * 0.08, 0, 0), glass)
+	else:
+		_box_mat(body, Vector3(1.15, 1.7, 0.06), pos + Vector3(0, 0, dir_sign * 0.04), frame)
+		_box_mat(body, Vector3(0.95, 1.45, 0.12), pos + Vector3(0, 0, dir_sign * 0.08), glass)
+
+
+func _us_flag_mat() -> StandardMaterial3D:
+	if _flag_material == null:
+		var mat := StandardMaterial3D.new()
+		mat.albedo_texture = _make_us_flag_tex()
+		mat.roughness = 0.75
+		mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+		_flag_material = mat
+	return _flag_material
+
+
+# Procedural American flag texture: 13 alternating red/white stripes with a
+# blue canton (upper-left) dotted with a small star grid.
+func _make_us_flag_tex() -> ImageTexture:
+	const TW := 76
+	const TH := 39
+	var img := Image.create(TW, TH, false, Image.FORMAT_RGB8)
+	var red := Color(0.70, 0.10, 0.13)
+	var white := Color(0.95, 0.95, 0.95)
+	var blue := Color(0.10, 0.15, 0.45)
+	var stripe_h := TH / 13.0
+	for y in TH:
+		var c := red if int(y / stripe_h) % 2 == 0 else white
+		for x in TW:
+			img.set_pixel(x, y, c)
+	var canton_w := int(TW * 0.42)
+	var canton_h := int(stripe_h * 7.0)
+	for y in canton_h:
+		for x in canton_w:
+			img.set_pixel(x, y, blue)
+	for r in 5:
+		for c in 6:
+			var sx := int((c + 0.5) * canton_w / 6.0)
+			var sy := int((r + 0.5) * canton_h / 5.0)
+			img.set_pixel(sx, sy, white)
+	return ImageTexture.create_from_image(img)
+
+
+# One chain-link mesh panel (a QuadMesh with the shared alpha-scissor texture).
+func _fence_panel(body: Node3D, panel: Vector2, pos: Vector3, rot_y: float) -> void:
+	var m := MeshInstance3D.new()
+	var q := QuadMesh.new()
+	q.size = panel
+	m.mesh = q
+	m.position = pos
+	m.rotation.y = rot_y
+	m.material_override = _chainlink_mat(panel)
+	body.add_child(m)
+
+
+func _chainlink_mat(panel: Vector2) -> StandardMaterial3D:
+	if _chainlink_material == null:
+		var mat := StandardMaterial3D.new()
+		mat.albedo_texture = _make_chainlink_tex()
+		mat.albedo_color = Color(0.78, 0.80, 0.83)
+		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
+		mat.alpha_scissor_threshold = 0.5
+		mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+		mat.roughness = 0.6
+		mat.metallic = 0.25
+		# All panels share this size, so a single scale tiles them identically.
+		mat.uv1_scale = Vector3(panel.x / 1.3, panel.y / 1.3, 1.0)
+		_chainlink_material = mat
+	return _chainlink_material
+
+
+# Diagonal cross-hatch forming chain-link diamonds; holes are transparent.
+func _make_chainlink_tex() -> ImageTexture:
+	const SZ := 64
+	var img := Image.create(SZ, SZ, false, Image.FORMAT_RGBA8)
+	img.fill(Color(0, 0, 0, 0))
+	var wire := Color(0.82, 0.84, 0.87, 1.0)
+	var period := 16
+	var thick := 3
+	for y in SZ:
+		for x in SZ:
+			var a := (x + y) % period
+			var b := ((x - y) % period + period) % period
+			if a < thick or b < thick:
+				img.set_pixel(x, y, wire)
+	return ImageTexture.create_from_image(img)
+
+
 func _build_station(body: Node3D, size: Vector3, color: Color, roof: Color) -> void:
 	_box(body, size, Vector3(0, size.y * 0.5, 0), color)
 	_box(body, Vector3(size.x + 1.0, 0.5, size.z + 1.0), Vector3(0, size.y + 0.25, 0), roof)  # overhang roof
@@ -3364,7 +3648,10 @@ func _tune_materials() -> void:
 		elif color.is_equal_approx(Color(0.56, 0.54, 0.52)):   # curb
 			mat.roughness = 0.88
 		elif color.is_equal_approx(Color(0.08, 0.38, 0.92)):   # ocean
-			mat.roughness = 0.03
+			# Higher roughness keeps the blue albedo visible from far away.
+			# A near-mirror value (e.g. 0.03) makes distant water reflect the pale
+			# horizon sky at grazing angles (Fresnel) and read as white.
+			mat.roughness = 0.55
 			mat.metallic  = 0.0
 		elif color.is_equal_approx(Color(0.40, 0.65, 0.85)):   # fountain water
 			mat.roughness = 0.08
@@ -3752,4 +4039,3 @@ func _build_mall(terrain: Node3D) -> void:
 			var col: Color = v_colors[rng.randi() % v_colors.size()]
 			_build_vehicle(terrain, Vector3(cxp, 0.0, rz), face, d, col, kind)
 			_prop_box(Vector3(cxp, 0.8, rz), Vector3(d.x, 1.7, d.z), face)
-

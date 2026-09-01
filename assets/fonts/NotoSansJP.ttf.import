@@ -1,8 +1,8 @@
-﻿[remap]
+[remap]
 
 importer="font_data_dynamic"
 type="FontFile"
-uid="uid://c07odemgcqeoo"
+uid="uid://bby7w8r60rahg"
 path="res://.godot/imported/NotoSansJP.ttf-2659246e986fc2d136c17e42de851678.fontdata"
 
 [deps]
@@ -45,4 +45,3 @@ script_support={
 "Kana": true
 }
 opentype_features={}
-

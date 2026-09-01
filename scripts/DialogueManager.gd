@@ -6,17 +6,24 @@ extends CanvasLayer
 
 signal option_selected(index: int)
 signal text_submitted(text: String)   # fired when player submits text input
+signal destination_selected(index: int)
 
 var _center_label: Label
 var _panel: PanelContainer
 var _speaker_label: Label
 var _text_label: Label
+var _text_jp: Label        # optional Japanese gloss under the English line
 var _options_scroll: ScrollContainer
 var _options_grid: GridContainer
 var _dir_panel: PanelContainer
 var _dir_title: Label
 var _dir_text: Label
 var _text_input: LineEdit
+
+# Assigned destination card (top-centre objective banner)
+var _destination_card: PanelContainer
+var _destination_name: Label
+var _dest_tween: Tween = null
 
 # Discovery panel (top-left)
 var _disc_panel: PanelContainer
@@ -34,6 +41,18 @@ var _poster_bg: ColorRect
 var _poster_panel: PanelContainer
 var _poster_vbox: VBoxContainer
 
+# First-destination tutorial hint (bottom-centre, non-blocking)
+var _tutorial_panel: PanelContainer
+var _tutorial_line1: Label
+var _tutorial_line2: Label
+var _tutorial_tween: Tween = null
+
+# Three-choice destination overlay
+var _destination_bg: ColorRect
+var _destination_prompt: Label
+var _destination_buttons: VBoxContainer
+var _destination_choice_open: bool = false
+
 # Elapsed timer (top-centre while goal active)
 var _elapsed_label: Label
 
@@ -44,6 +63,12 @@ var _is_typing: bool = false
 var _tts_enabled: bool = false
 
 const PANEL_H := -245.0
+
+# Top-centre HUD stack: the destination card sits at the top edge, and the
+# elapsed timer clears its height so the two never overlap while navigating.
+const DEST_CARD_TOP := 12.0
+const ELAPSED_TOP := 94.0
+const DEST_FADE_SECONDS := 0.18
 
 # --- Pre-recorded NPC voice clips -------------------------------------------
 # Each fixed NPC line maps to an audio file slug in res://assets/voice/. When a
@@ -64,6 +89,8 @@ const LINE_CLIPS := {
 	"I'm good!": "im_good",
 	"I'm great, thanks!": "im_great_thanks",
 	"Sorry, I don't know that place.": "sorry_dont_know",
+	"I don't know. Ask him.": "dont_know_ask_him",
+	"I don't know. Ask her.": "dont_know_ask_her",
 	"It's over there!": "its_over_there",
 }
 var _voice_player: AudioStreamPlayer
@@ -84,6 +111,47 @@ func _build_ui() -> void:
 	_jp_var.base_font = _jp_base
 	_jp_var.variation_embolden = 0.5   # synthetic bold; works regardless of font axes
 	_jp_font = _jp_var
+	# --- Assigned destination card (top-centre) -------------------------------
+	# Anchored to the centre of the top edge and sized by its own content, so it
+	# stays centred and compact at any window size.
+	_destination_card = PanelContainer.new()
+	_destination_card.anchor_left = 0.5
+	_destination_card.anchor_right = 0.5
+	_destination_card.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_destination_card.offset_top = DEST_CARD_TOP
+	_destination_card.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var destination_style := StyleBoxFlat.new()
+	destination_style.bg_color = Color(0.04, 0.06, 0.11, 0.72)
+	destination_style.border_color = Color(1.0, 0.82, 0.35, 0.55)
+	destination_style.set_border_width_all(2)
+	destination_style.set_corner_radius_all(14)
+	destination_style.content_margin_left = 26.0
+	destination_style.content_margin_right = 26.0
+	destination_style.content_margin_top = 7.0
+	destination_style.content_margin_bottom = 9.0
+	_destination_card.add_theme_stylebox_override("panel", destination_style)
+	add_child(_destination_card)
+
+	var destination_box := VBoxContainer.new()
+	destination_box.add_theme_constant_override("separation", 0)
+	_destination_card.add_child(destination_box)
+	var destination_caption := Label.new()
+	destination_caption.text = "行き先"
+	destination_caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	destination_caption.add_theme_font_size_override("font_size", 16)
+	destination_caption.add_theme_color_override("font_color", Color(1.0, 0.82, 0.35))
+	if _jp_font:
+		destination_caption.add_theme_font_override("font", _jp_font)
+	destination_box.add_child(destination_caption)
+	_destination_name = Label.new()
+	_destination_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_destination_name.add_theme_font_size_override("font_size", 28)
+	_destination_name.add_theme_color_override("font_color", Color.WHITE)
+	if _jp_font:
+		_destination_name.add_theme_font_override("font", _jp_font)
+	destination_box.add_child(_destination_name)
+	_destination_card.visible = false
+
 	# --- Discovery panel (top-left) ------------------------------------------
 	_disc_panel = PanelContainer.new()
 	_disc_panel.position = Vector2(14, 14)
@@ -123,7 +191,7 @@ func _build_ui() -> void:
 	_elapsed_label.anchor_left = 0.5
 	_elapsed_label.anchor_right = 0.5
 	_elapsed_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	_elapsed_label.offset_top = 16
+	_elapsed_label.offset_top = ELAPSED_TOP
 	_elapsed_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_elapsed_label.add_theme_font_size_override("font_size", 30)
 	_elapsed_label.add_theme_color_override("font_color", Color(1, 0.9, 0.3))
@@ -204,6 +272,18 @@ func _build_ui() -> void:
 		_text_label.add_theme_font_override("font", _jp_font)
 	vbox.add_child(_text_label)
 
+	# Japanese gloss shown under the English line. It appears in full straight
+	# away — the typewriter is the English line's effect, and a student reading
+	# the translation should not have to wait for it.
+	_text_jp = Label.new()
+	_text_jp.add_theme_font_size_override("font_size", 20)
+	_text_jp.add_theme_color_override("font_color", Color(0.72, 0.82, 0.95))
+	_text_jp.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	if _jp_font:
+		_text_jp.add_theme_font_override("font", _jp_font)
+	_text_jp.visible = false
+	vbox.add_child(_text_jp)
+
 	_options_scroll = ScrollContainer.new()
 	_options_scroll.custom_minimum_size = Vector2(0, 65)
 	_options_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -236,6 +316,78 @@ func _build_ui() -> void:
 	_text_input.text_submitted.connect(_on_text_input_submitted)
 
 	_build_poster_ui()
+	_build_destination_choice_ui()
+	_build_tutorial_ui()
+
+
+# --- First-destination tutorial hint -----------------------------------------
+# A small notice, not a modal: it never takes focus and never blocks input, so
+# the player can walk off looking for a townsperson while it is still up.
+func _build_tutorial_ui() -> void:
+	_tutorial_panel = PanelContainer.new()
+	_tutorial_panel.anchor_left = 0.5
+	_tutorial_panel.anchor_top = 1.0
+	_tutorial_panel.anchor_right = 0.5
+	_tutorial_panel.anchor_bottom = 1.0
+	_tutorial_panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_tutorial_panel.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	_tutorial_panel.offset_bottom = -22
+	_tutorial_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.04, 0.06, 0.11, 0.78)
+	style.border_color = Color(0.55, 0.85, 0.60, 0.65)
+	style.set_border_width_all(2)
+	style.set_corner_radius_all(14)
+	style.content_margin_left = 24.0
+	style.content_margin_right = 24.0
+	style.content_margin_top = 12.0
+	style.content_margin_bottom = 12.0
+	_tutorial_panel.add_theme_stylebox_override("panel", style)
+	add_child(_tutorial_panel)
+
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 4)
+	_tutorial_panel.add_child(box)
+
+	_tutorial_line1 = Label.new()
+	_tutorial_line1.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_tutorial_line1.add_theme_font_size_override("font_size", 22)
+	_tutorial_line1.add_theme_color_override("font_color", Color(1, 1, 1))
+	if _jp_font:
+		_tutorial_line1.add_theme_font_override("font", _jp_font)
+	box.add_child(_tutorial_line1)
+
+	_tutorial_line2 = Label.new()
+	_tutorial_line2.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_tutorial_line2.add_theme_font_size_override("font_size", 18)
+	_tutorial_line2.add_theme_color_override("font_color", Color(0.72, 0.90, 0.76))
+	if _jp_font:
+		_tutorial_line2.add_theme_font_override("font", _jp_font)
+	box.add_child(_tutorial_line2)
+
+	_tutorial_panel.visible = false
+
+
+func show_tutorial_hint(line1: String, line2: String) -> void:
+	_tutorial_line1.text = line1
+	_tutorial_line2.text = line2
+	if _tutorial_tween != null:
+		_tutorial_tween.kill()
+	_tutorial_panel.modulate.a = 0.0
+	_tutorial_panel.visible = true
+	_tutorial_tween = create_tween()
+	_tutorial_tween.tween_property(_tutorial_panel, "modulate:a", 1.0, 0.35)
+
+
+func hide_tutorial_hint() -> void:
+	if _tutorial_panel == null or not _tutorial_panel.visible:
+		return
+	if _tutorial_tween != null:
+		_tutorial_tween.kill()
+	_tutorial_tween = create_tween()
+	_tutorial_tween.tween_property(_tutorial_panel, "modulate:a", 0.0, 0.4)
+	_tutorial_tween.finished.connect(
+			func() -> void: _tutorial_panel.visible = false)
 
 
 # --- Poster close-up overlay -------------------------------------------------
@@ -321,6 +473,125 @@ func is_poster_open() -> bool:
 	return _poster_bg != null and _poster_bg.visible
 
 
+# --- Assigned destination + three-choice overlay ----------------------------
+func _build_destination_choice_ui() -> void:
+	_destination_bg = ColorRect.new()
+	_destination_bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_destination_bg.color = Color(0.01, 0.03, 0.08, 0.76)
+	_destination_bg.mouse_filter = Control.MOUSE_FILTER_STOP
+	_destination_bg.visible = false
+	add_child(_destination_bg)
+
+	var center := CenterContainer.new()
+	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_destination_bg.add_child(center)
+	var choice_panel := PanelContainer.new()
+	choice_panel.custom_minimum_size = Vector2(620, 430)
+	var choice_style := StyleBoxFlat.new()
+	choice_style.bg_color = Color(0.96, 0.94, 0.86)
+	choice_style.border_color = Color(0.12, 0.24, 0.42)
+	choice_style.set_border_width_all(6)
+	choice_style.set_corner_radius_all(18)
+	choice_style.set_content_margin_all(34)
+	choice_panel.add_theme_stylebox_override("panel", choice_style)
+	center.add_child(choice_panel)
+
+	var choice_box := VBoxContainer.new()
+	choice_box.add_theme_constant_override("separation", 20)
+	choice_panel.add_child(choice_box)
+	_destination_prompt = Label.new()
+	_destination_prompt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_destination_prompt.add_theme_font_size_override("font_size", 34)
+	_destination_prompt.add_theme_color_override("font_color", Color(0.08, 0.16, 0.30))
+	if _jp_font:
+		_destination_prompt.add_theme_font_override("font", _jp_font)
+	choice_box.add_child(_destination_prompt)
+	var separator := HSeparator.new()
+	choice_box.add_child(separator)
+	_destination_buttons = VBoxContainer.new()
+	_destination_buttons.add_theme_constant_override("separation", 14)
+	choice_box.add_child(_destination_buttons)
+
+
+func show_destination_choice(prompt: String, places: Array[String]) -> int:
+	assert(places.size() == 3, "Destination choice overlay requires exactly three places.")
+	_clear_destination_buttons()
+	_destination_prompt.text = prompt
+	_destination_choice_open = true
+
+	var buttons: Array[Button] = []
+	for i in places.size():
+		var button := Button.new()
+		button.name = "DestinationChoice%d" % i
+		button.text = places[i]
+		button.custom_minimum_size = Vector2(520, 76)
+		button.add_theme_font_size_override("font_size", 28)
+		button.focus_mode = Control.FOCUS_ALL
+		if _jp_font:
+			button.add_theme_font_override("font", _jp_font)
+		button.pressed.connect(_on_destination_pressed.bind(i))
+		_destination_buttons.add_child(button)
+		buttons.append(button)
+
+	for i in buttons.size():
+		var previous := buttons[(i - 1 + buttons.size()) % buttons.size()]
+		var next := buttons[(i + 1) % buttons.size()]
+		buttons[i].focus_neighbor_top = buttons[i].get_path_to(previous)
+		buttons[i].focus_neighbor_left = buttons[i].get_path_to(previous)
+		buttons[i].focus_neighbor_bottom = buttons[i].get_path_to(next)
+		buttons[i].focus_neighbor_right = buttons[i].get_path_to(next)
+
+	_destination_bg.visible = true
+	buttons[0].grab_focus()
+	var index: int = await destination_selected
+	return index
+
+
+func hide_destination_choice() -> void:
+	_destination_choice_open = false
+	var focused := get_viewport().gui_get_focus_owner()
+	if focused != null and _destination_bg.is_ancestor_of(focused):
+		focused.release_focus()
+	_destination_bg.visible = false
+	_clear_destination_buttons()
+
+
+func set_destination_card(place: String) -> void:
+	_destination_name.text = place
+	_destination_card.visible = true
+	# Quick fade so the new objective registers without holding up play.
+	if _dest_tween != null:
+		_dest_tween.kill()
+	_destination_card.modulate.a = 0.0
+	_dest_tween = create_tween()
+	_dest_tween.tween_property(_destination_card, "modulate:a", 1.0, DEST_FADE_SECONDS)
+
+
+func clear_destination_card() -> void:
+	if _dest_tween != null:
+		_dest_tween.kill()
+		_dest_tween = null
+	_destination_name.text = ""
+	_destination_card.visible = false
+	_destination_card.modulate.a = 1.0
+
+
+func _on_destination_pressed(index: int) -> void:
+	if not _destination_choice_open:
+		return
+	_destination_choice_open = false
+	for child in _destination_buttons.get_children():
+		if child is Button:
+			(child as Button).disabled = true
+	destination_selected.emit(index)
+
+
+func _clear_destination_buttons() -> void:
+	for child in _destination_buttons.get_children():
+		_destination_buttons.remove_child(child)
+		child.queue_free()
+
+
 func _on_text_input_submitted(txt: String) -> void:
 	var trimmed := txt.strip_edges()
 	if trimmed == "":
@@ -354,20 +625,36 @@ func mark_discovered(name: String, _time_str: String) -> void:
 func add_hint(name: String, already_found: bool = false) -> void:
 	if _hints.has(name):
 		return
-	var lbl := RichTextLabel.new()
-	lbl.bbcode_enabled = true
-	lbl.fit_content = true
-	lbl.scroll_active = false
-	lbl.custom_minimum_size = Vector2(200, 0)
-	lbl.add_theme_font_size_override("normal_font_size", 17)
-	lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	# Label is the hint item. SIZE_SHRINK_BEGIN makes it only as wide as its text,
+	# so the ColorRect child (anchor_right=1) stays within the text bounds.
+	var lbl := Label.new()
+	lbl.text = name
+	lbl.add_theme_font_size_override("font_size", 19)
+	lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	lbl.custom_minimum_size = Vector2(0, 26)
+	lbl.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+
+	# 2-px dark line as a child of the label — bounded by label width = text width.
+	var line := ColorRect.new()
+	line.color = Color(0.05, 0.05, 0.05)
+	line.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	line.anchor_left   = 0.0
+	line.anchor_right  = 1.0
+	line.anchor_top    = 0.5
+	line.anchor_bottom = 0.5
+	line.offset_top    = -1.0
+	line.offset_bottom =  1.0
+	line.visible = false
+	lbl.add_child(line)
+
 	_hints[name] = lbl
 	if already_found:
-		lbl.text = "[color=#555555][s][color=#dddddd]" + name + "[/color][/s][/color]"
+		lbl.add_theme_color_override("font_color", Color(0.67, 0.67, 0.67))
+		line.visible = true
 		_disc_list.add_child(lbl)
 		_found_hint_count += 1
 	else:
-		lbl.text = "[color=#d9ffd9]" + name + "[/color]"
+		lbl.add_theme_color_override("font_color", Color(0.6, 1.0, 0.6))
 		var insert_at := _disc_list.get_child_count() - _found_hint_count
 		_disc_list.add_child(lbl)
 		_disc_list.move_child(lbl, insert_at)
@@ -377,10 +664,12 @@ func add_hint(name: String, already_found: bool = false) -> void:
 func _apply_hint_found(name: String) -> void:
 	if not _hints.has(name):
 		return
-	var lbl: RichTextLabel = _hints[name]
-	if lbl.text.contains("[s]"):
+	var lbl: Label = _hints[name]
+	var line: ColorRect = lbl.get_child(0)
+	if line.visible:
 		return
-	lbl.text = "[color=#555555][s][color=#dddddd]" + name + "[/color][/s][/color]"
+	lbl.add_theme_color_override("font_color", Color(0.67, 0.67, 0.67))
+	line.visible = true
 	_disc_list.move_child(lbl, _disc_list.get_child_count() - 1)
 	_found_hint_count += 1
 
@@ -389,10 +678,12 @@ func _apply_hint_found(name: String) -> void:
 # Public API
 # -----------------------------------------------------------------------------
 
-func show_text(speaker: String, text: String) -> void:
+func show_text(speaker: String, text: String, translation: String = "") -> void:
 	_speaker_label.text = speaker
 	_text_label.text = text
 	_text_label.visible_characters = 0
+	_text_jp.text = translation
+	_text_jp.visible = translation != ""
 	_clear_options()
 	_options_scroll.visible = false
 	_panel.visible = true
@@ -428,6 +719,7 @@ func show_options(speaker: String, prompt: String, options: Array) -> int:
 	_text_label.text = prompt
 	_text_label.visible_characters = -1
 	_is_typing = false
+	_text_jp.visible = false   # the gloss belongs to the line it was shown with
 	_clear_options()
 
 	var first: Button = null

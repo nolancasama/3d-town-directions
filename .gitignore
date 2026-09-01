@@ -13,3 +13,9 @@ build/
 
 # Piper voice models (local only — used to regenerate assets/voice/)
 tools/piper_models/
+
+# Claude/Codex delegation artifacts (local only)
+.ai/
+
+# Font download archives (the extracted .ttf is what the game uses)
+assets/fonts/*.zip

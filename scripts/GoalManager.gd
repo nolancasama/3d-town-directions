@@ -4,6 +4,8 @@ extends Node
 # GoalManager.gd
 # =============================================================================
 
+signal arrival_completed(destination: String)
+
 var _player: Node3D
 var _dialogue: DialogueManager
 var _camera_focus: CameraFocusManager
@@ -136,8 +138,9 @@ func _on_reached() -> void:
 
 	if _revisit or _named.has(dest_name):
 		var art2 := "" if dest_name.contains("'s") else "the "
-		_dialogue.show_center_message("You've already found %s%s!" % [art2, dest_name])
+		await _dialogue.show_center_message("You've already found %s%s!" % [art2, dest_name])
 		_revisit = false
+		arrival_completed.emit(dest_name)
 		return
 
 	# First discovery — record time, award credit, celebrate.
@@ -147,7 +150,8 @@ func _on_reached() -> void:
 	_dialogue.mark_discovered(dest_name, time_str)
 
 	_revisit = false
-	_celebrate(dest_name, node, spot)
+	await _celebrate(dest_name, node, spot)
+	arrival_completed.emit(dest_name)
 
 
 func _celebrate(dest_name: String, node: Node3D, spot: Vector3) -> void:
@@ -193,15 +197,16 @@ func _spawn_confetti(spot: Vector3) -> void:
 	p.initial_velocity_min = 6.0
 	p.initial_velocity_max = 11.0
 	p.gravity = Vector3(0, -12.0, 0)
-	p.angular_velocity_min = -400.0
-	p.angular_velocity_max = 400.0
-	p.scale_amount_min = 0.16
-	p.scale_amount_max = 0.30
-	var bit := BoxMesh.new()
-	bit.size = Vector3(0.5, 0.5, 0.08)
+	p.angular_velocity_min = -200.0
+	p.angular_velocity_max = 200.0
+	p.scale_amount_min = 0.18
+	p.scale_amount_max = 0.32
+	var bit := QuadMesh.new()
+	bit.size = Vector2(0.35, 0.55)
 	var mat := StandardMaterial3D.new()
 	mat.vertex_color_use_as_albedo = true
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 	bit.material = mat
 	p.mesh = bit
 	var grad := Gradient.new()
