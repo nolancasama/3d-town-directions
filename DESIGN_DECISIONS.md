@@ -80,4 +80,19 @@ A useful rule:
   player, and it fades as soon as the player walks up to any townsperson. The
   bottom-centre slot is safe because the directions panel that shares it only
   appears after an NPC has given directions, by which point the hint is gone.
+- The discovered-places list is no longer permanently on the HUD. A compact
+  counter (drawn map pin + "13 / 25") sits top-left and opens the full list on
+  tap; the list closes on a second tap, the X, a click outside, or walking up to
+  an NPC. This keeps the top-centre destination card the most prominent element
+  and the counter clearly secondary.
+- Found places are marked with a tick and dimmed slightly, replacing the old
+  strikethrough, which read as "removed" or "unavailable" rather than "done".
+  Unfound places stay bright, since those are the ones still worth going after.
+- The list still shows only places the player has actually learned about, from
+  posters and the town directory, plus anything discovered. It is not a reveal
+  of all 25 goals -- that would undercut the poster/welcome-sign exploration.
+- The counter icon is drawn vector art, not an emoji. The UI font is a subset of
+  Noto Sans JP, which contains no pictographs, so any emoji renders as blank
+  space in the web build (and silently falls back to a system font on Windows,
+  which is why it looks fine in the editor).
 

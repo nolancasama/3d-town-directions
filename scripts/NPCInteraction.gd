@@ -403,6 +403,7 @@ func _begin_greet() -> void:
 	# served its purpose and fades out.
 	if _dialogue != null:
 		_dialogue.hide_tutorial_hint()
+		_dialogue.hide_places_list()   # never leave it sitting over a conversation
 	_state = State.GREET
 	_hint.visible = true     # show the "!" marker
 	_speech.listen()

@@ -25,14 +25,25 @@ var _destination_card: PanelContainer
 var _destination_name: Label
 var _dest_tween: Tween = null
 
-# Discovery panel (top-left)
+# Discovery progress (compact top-left counter; full list on demand)
 var _disc_panel: PanelContainer
 var _disc_count: Label
-var _disc_list: VBoxContainer
+var _disc_style: StyleBoxFlat
+var _disc_style_hover: StyleBoxFlat
 var _disc_total: int = 0
 var _found_count: int = 0        # all discovered buildings (hinted or not)
-var _hints: Dictionary = {}      # place name -> RichTextLabel
-var _found_hint_count: int = 0   # how many struck-through hints sit at the bottom
+var _known: Array[String] = []   # places the player has learned of, in order
+var _found: Dictionary = {}      # place name -> true once discovered
+var _new_places: Dictionary = {} # place name -> true while its NEW badge lasts
+var _disc_tween: Tween = null
+
+# Expanded places list (opened from the counter)
+var _places_bg: ColorRect
+var _places_panel: PanelContainer
+var _places_title: Label
+var _places_list: VBoxContainer
+var _places_scroll: ScrollContainer
+var _places_open: bool = false
 
 var _jp_font: Font = null
 
@@ -70,6 +81,11 @@ const DEST_CARD_TOP := 12.0
 const ELAPSED_TOP := 94.0
 const DEST_FADE_SECONDS := 0.18
 const TUTORIAL_WIDTH := 640.0
+
+# Discovery counter + places list
+const DISC_COUNT_COLOR := Color(1.0, 0.90, 0.45)
+const PLACES_WIDTH := 330.0
+const NEW_BADGE_SECONDS := 30.0
 
 # --- Pre-recorded NPC voice clips -------------------------------------------
 # Each fixed NPC line maps to an audio file slug in res://assets/voice/. When a
@@ -153,39 +169,55 @@ func _build_ui() -> void:
 	destination_box.add_child(_destination_name)
 	_destination_card.visible = false
 
-	# --- Discovery panel (top-left) ------------------------------------------
+	# --- Discovery counter (top-left, compact) --------------------------------
+	# Only the count sits on the HUD; the full list is one tap away. It stays
+	# visually quieter than the top-centre destination card, which is the thing
+	# the player is meant to be acting on.
 	_disc_panel = PanelContainer.new()
 	_disc_panel.position = Vector2(14, 14)
-	_disc_panel.custom_minimum_size = Vector2(220, 0)
+	_disc_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	_disc_style = StyleBoxFlat.new()
+	_disc_style.bg_color = Color(0.04, 0.06, 0.11, 0.64)
+	_disc_style.border_color = Color(1.0, 0.90, 0.45, 0.38)
+	_disc_style.set_border_width_all(2)
+	_disc_style.set_corner_radius_all(12)
+	_disc_style.content_margin_left = 12.0
+	_disc_style.content_margin_right = 15.0
+	_disc_style.content_margin_top = 6.0
+	_disc_style.content_margin_bottom = 6.0
+	_disc_style_hover = _disc_style.duplicate() as StyleBoxFlat
+	_disc_style_hover.bg_color = Color(0.10, 0.15, 0.24, 0.88)
+	_disc_style_hover.border_color = Color(1.0, 0.90, 0.45, 0.80)
+	_disc_panel.add_theme_stylebox_override("panel", _disc_style)
+	_disc_panel.gui_input.connect(_on_disc_input)
+	_disc_panel.mouse_entered.connect(
+			func() -> void: _disc_panel.add_theme_stylebox_override("panel", _disc_style_hover))
+	_disc_panel.mouse_exited.connect(
+			func() -> void: _disc_panel.add_theme_stylebox_override("panel", _disc_style))
 	add_child(_disc_panel)
 
-	var dm := MarginContainer.new()
-	for s in ["margin_left", "margin_right", "margin_top", "margin_bottom"]:
-		dm.add_theme_constant_override(s, 10)
-	_disc_panel.add_child(dm)
+	var disc_box := HBoxContainer.new()
+	disc_box.add_theme_constant_override("separation", 8)
+	disc_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_disc_panel.add_child(disc_box)
 
-	var dv := VBoxContainer.new()
-	dv.add_theme_constant_override("separation", 4)
-	dm.add_child(dv)
+	# Drawn rather than an emoji: the UI font is a subset of Noto Sans JP, which
+	# has no pictographs at all, so a map glyph would render as blank space.
+	var pin := MapPin.new()
+	pin.custom_minimum_size = Vector2(15, 20)
+	pin.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	disc_box.add_child(pin)
 
 	_disc_count = Label.new()
-	_disc_count.add_theme_font_size_override("font_size", 22)
-	_disc_count.add_theme_color_override("font_color", Color(1.0, 0.90, 0.4))
-	_disc_count.text = "0 / 0 か所発見"
-	if _jp_font:
-		_disc_count.add_theme_font_override("font", _jp_font)
-	dv.add_child(_disc_count)
+	_disc_count.add_theme_font_size_override("font_size", 21)
+	_disc_count.add_theme_color_override("font_color", DISC_COUNT_COLOR)
+	_disc_count.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_disc_count.text = "0 / 0"
+	_disc_count.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	disc_box.add_child(_disc_count)
+	_disc_panel.visible = false
 
-	# Scroll container caps the list at ~7 visible rows; extra entries scroll.
-	var disc_scroll := ScrollContainer.new()
-	disc_scroll.custom_minimum_size = Vector2(200, 154)
-	disc_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	dv.add_child(disc_scroll)
-
-	_disc_list = VBoxContainer.new()
-	_disc_list.add_theme_constant_override("separation", 2)
-	_disc_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	disc_scroll.add_child(_disc_list)
+	_build_places_list_ui()
 
 	# --- Elapsed timer (top-centre) ------------------------------------------
 	_elapsed_label = Label.new()
@@ -612,7 +644,7 @@ func _on_text_input_submitted(txt: String) -> void:
 # -----------------------------------------------------------------------------
 func init_discovery(total: int) -> void:
 	_disc_total = total
-	_disc_count.text = "0 / %d か所発見" % total
+	_disc_count.text = "0 / %d" % total
 	_disc_panel.visible = false
 
 
@@ -620,65 +652,218 @@ func show_discovery_panel() -> void:
 	_disc_panel.visible = true
 
 
-func mark_discovered(name: String, _time_str: String) -> void:
+func mark_discovered(place: String, _time_str: String) -> void:
+	if not _known.has(place):
+		_known.append(place)
+	if _found.has(place):
+		return
+	_found[place] = true
 	_found_count += 1
-	_disc_count.text = "%d / %d か所発見" % [_found_count, _disc_total]
-	if _hints.has(name):
-		_apply_hint_found(name)
-	else:
-		add_hint(name, true)
-
-
-func add_hint(name: String, already_found: bool = false) -> void:
-	if _hints.has(name):
-		return
-	# Label is the hint item. SIZE_SHRINK_BEGIN makes it only as wide as its text,
-	# so the ColorRect child (anchor_right=1) stays within the text bounds.
-	var lbl := Label.new()
-	lbl.text = name
-	lbl.add_theme_font_size_override("font_size", 19)
-	lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	lbl.custom_minimum_size = Vector2(0, 26)
-	lbl.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-
-	# 2-px dark line as a child of the label — bounded by label width = text width.
-	var line := ColorRect.new()
-	line.color = Color(0.05, 0.05, 0.05)
-	line.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	line.anchor_left   = 0.0
-	line.anchor_right  = 1.0
-	line.anchor_top    = 0.5
-	line.anchor_bottom = 0.5
-	line.offset_top    = -1.0
-	line.offset_bottom =  1.0
-	line.visible = false
-	lbl.add_child(line)
-
-	_hints[name] = lbl
-	if already_found:
-		lbl.add_theme_color_override("font_color", Color(0.67, 0.67, 0.67))
-		line.visible = true
-		_disc_list.add_child(lbl)
-		_found_hint_count += 1
-	else:
-		lbl.add_theme_color_override("font_color", Color(0.6, 1.0, 0.6))
-		var insert_at := _disc_list.get_child_count() - _found_hint_count
-		_disc_list.add_child(lbl)
-		_disc_list.move_child(lbl, insert_at)
+	_disc_count.text = "%d / %d" % [_found_count, _disc_total]
 	_disc_panel.visible = true
+	_flag_new(place)
+	_pulse_counter()
+	if _places_open:
+		_rebuild_places_rows()
 
 
-func _apply_hint_found(name: String) -> void:
-	if not _hints.has(name):
+# A place stays flagged NEW until the player opens the list or the timer expires.
+func _flag_new(place: String) -> void:
+	_new_places[place] = true
+	var timer := get_tree().create_timer(NEW_BADGE_SECONDS)
+	timer.timeout.connect(func() -> void: _new_places.erase(place))
+
+
+# Brief pop + colour flash, so a new discovery registers without pulling the eye
+# away from play.
+func _pulse_counter() -> void:
+	if _disc_tween != null:
+		_disc_tween.kill()
+	_disc_panel.pivot_offset = _disc_panel.size * 0.5
+	_disc_panel.scale = Vector2.ONE
+	_disc_count.add_theme_color_override("font_color", Color(0.55, 1.0, 0.62))
+	_disc_tween = create_tween()
+	_disc_tween.set_trans(Tween.TRANS_SINE)
+	_disc_tween.tween_property(_disc_panel, "scale", Vector2(1.16, 1.16), 0.13)
+	_disc_tween.tween_property(_disc_panel, "scale", Vector2.ONE, 0.20)
+	_disc_tween.tween_callback(func() -> void:
+			_disc_count.add_theme_color_override("font_color", DISC_COUNT_COLOR))
+
+
+func add_hint(place: String, already_found: bool = false) -> void:
+	if not _known.has(place):
+		_known.append(place)
+	if already_found and not _found.has(place):
+		_found[place] = true
+	_disc_panel.visible = true
+	if _places_open:
+		_rebuild_places_rows()
+
+
+# -----------------------------------------------------------------------------
+# Expanded places list
+# -----------------------------------------------------------------------------
+func _build_places_list_ui() -> void:
+	# Faint scrim: it catches clicks outside the panel so they close it, but stays
+	# light enough that this reads as a HUD expansion rather than a menu screen.
+	_places_bg = ColorRect.new()
+	_places_bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_places_bg.color = Color(0, 0, 0, 0.28)
+	_places_bg.mouse_filter = Control.MOUSE_FILTER_STOP
+	_places_bg.visible = false
+	_places_bg.gui_input.connect(func(event: InputEvent) -> void:
+			if event is InputEventMouseButton and (event as InputEventMouseButton).pressed:
+				hide_places_list())
+	add_child(_places_bg)
+
+	_places_panel = PanelContainer.new()
+	_places_panel.position = Vector2(14, 62)
+	_places_panel.custom_minimum_size = Vector2(PLACES_WIDTH, 0)
+	_places_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.05, 0.07, 0.12, 0.95)
+	style.border_color = Color(1.0, 0.90, 0.45, 0.45)
+	style.set_border_width_all(2)
+	style.set_corner_radius_all(14)
+	style.set_content_margin_all(14)
+	_places_panel.add_theme_stylebox_override("panel", style)
+	_places_bg.add_child(_places_panel)
+
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 8)
+	_places_panel.add_child(box)
+
+	var header := HBoxContainer.new()
+	header.add_theme_constant_override("separation", 10)
+	box.add_child(header)
+	_places_title = Label.new()
+	_places_title.add_theme_font_size_override("font_size", 19)
+	_places_title.add_theme_color_override("font_color", DISC_COUNT_COLOR)
+	_places_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	if _jp_font:
+		_places_title.add_theme_font_override("font", _jp_font)
+	header.add_child(_places_title)
+
+	var close_btn := Button.new()
+	close_btn.text = "X"
+	close_btn.custom_minimum_size = Vector2(28, 28)
+	close_btn.focus_mode = Control.FOCUS_NONE
+	close_btn.add_theme_font_size_override("font_size", 16)
+	close_btn.pressed.connect(hide_places_list)
+	header.add_child(close_btn)
+
+	box.add_child(HSeparator.new())
+
+	_places_scroll = ScrollContainer.new()
+	_places_scroll.custom_minimum_size = Vector2(PLACES_WIDTH - 10, 0)
+	_places_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	box.add_child(_places_scroll)
+	var scroll := _places_scroll
+
+	_places_list = VBoxContainer.new()
+	_places_list.add_theme_constant_override("separation", 3)
+	_places_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(_places_list)
+
+
+func _on_disc_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and (event as InputEventMouseButton).pressed:
+		toggle_places_list()
+
+
+func toggle_places_list() -> void:
+	if _places_open:
+		hide_places_list()
+	else:
+		show_places_list()
+
+
+func show_places_list() -> void:
+	# Never stack on top of a choice the player has to make first.
+	if _destination_choice_open or is_poster_open():
 		return
-	var lbl: Label = _hints[name]
-	var line: ColorRect = lbl.get_child(0)
-	if line.visible:
-		return
-	lbl.add_theme_color_override("font_color", Color(0.67, 0.67, 0.67))
-	line.visible = true
-	_disc_list.move_child(lbl, _disc_list.get_child_count() - 1)
-	_found_hint_count += 1
+	_rebuild_places_rows()
+	_places_bg.visible = true
+	_places_open = true
+	# Seeing the list is what retires the NEW badges: this viewing still shows
+	# them, the next one will not.
+	_new_places.clear()
+
+
+func hide_places_list() -> void:
+	_places_open = false
+	_places_bg.visible = false
+
+
+func is_places_list_open() -> bool:
+	return _places_open
+
+
+func _rebuild_places_rows() -> void:
+	for child in _places_list.get_children():
+		_places_list.remove_child(child)
+		child.queue_free()
+	_places_title.text = "発見した場所  %d / %d" % [_found_count, _disc_total]
+
+	# Found first, then places the player knows of but has not reached.
+	var ordered: Array[String] = []
+	for place: String in _known:
+		if _found.has(place):
+			ordered.append(place)
+	for place: String in _known:
+		if not _found.has(place):
+			ordered.append(place)
+
+	for place: String in ordered:
+		_places_list.add_child(_make_place_row(place))
+
+	# Height follows the list so the panel is not mostly empty early on, capped
+	# so a full town still fits on screen and scrolls instead.
+	_places_scroll.custom_minimum_size.y = clampf(float(ordered.size()) * 29.0, 60.0, 340.0)
+
+
+func _make_place_row(place: String) -> HBoxContainer:
+	var found: bool = _found.has(place)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 7)
+
+	# A tick marks the found ones. Deliberately not strikethrough, which reads as
+	# "removed" or "unavailable" rather than "done".
+	var mark := Label.new()
+	mark.text = "✓" if found else ""
+	mark.custom_minimum_size = Vector2(18, 0)
+	mark.add_theme_font_size_override("font_size", 18)
+	mark.add_theme_color_override("font_color", Color(0.45, 0.95, 0.55))
+	row.add_child(mark)
+
+	var label := Label.new()
+	label.text = place
+	label.add_theme_font_size_override("font_size", 18)
+	# Found places dim slightly; unfound stay bright and fully readable, since
+	# those are the ones still worth going after.
+	label.add_theme_color_override("font_color",
+			Color(0.62, 0.66, 0.62) if found else Color(0.95, 0.97, 0.95))
+	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(label)
+
+	if _new_places.has(place):
+		var badge := Label.new()
+		badge.text = "NEW"
+		badge.add_theme_font_size_override("font_size", 13)
+		badge.add_theme_color_override("font_color", Color(0.15, 0.10, 0.02))
+		var bs := StyleBoxFlat.new()
+		bs.bg_color = Color(1.0, 0.84, 0.30)
+		bs.set_corner_radius_all(6)
+		bs.content_margin_left = 7.0
+		bs.content_margin_right = 7.0
+		bs.content_margin_top = 1.0
+		bs.content_margin_bottom = 2.0
+		var wrap := PanelContainer.new()
+		wrap.add_theme_stylebox_override("panel", bs)
+		wrap.add_child(badge)
+		row.add_child(wrap)
+
+	return row
 
 
 # -----------------------------------------------------------------------------
@@ -885,3 +1070,25 @@ func speak(text: String, pitch: float = 1.0, rate: float = 0.88, voice_index: in
 			window.speechSynthesis.speak(u);
 		})();
 	""", true)
+
+
+# -----------------------------------------------------------------------------
+# Small drawn map-pin for the discovery counter. Vector art rather than an emoji
+# because the subset UI font carries no pictographs at all.
+# -----------------------------------------------------------------------------
+class MapPin:
+	extends Control
+
+	const PIN_COLOR := Color(1.0, 0.88, 0.45)
+	const HOLE_COLOR := Color(0.06, 0.08, 0.13)
+
+	func _draw() -> void:
+		var head := Vector2(size.x * 0.5, size.y * 0.36)
+		var radius: float = size.x * 0.42
+		draw_circle(head, radius, PIN_COLOR)
+		draw_colored_polygon(PackedVector2Array([
+			Vector2(size.x * 0.5 - radius * 0.62, size.y * 0.62),
+			Vector2(size.x * 0.5 + radius * 0.62, size.y * 0.62),
+			Vector2(size.x * 0.5, size.y * 0.99),
+		]), PIN_COLOR)
+		draw_circle(head, radius * 0.40, HOLE_COLOR)
