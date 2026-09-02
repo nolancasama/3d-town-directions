@@ -29,11 +29,6 @@ const TIREDNESS_PLACES: Array[String] = [
 	"Hotel", "Park", "Starbucks",
 ]
 
-const NEED_LINES: Dictionary = {
-	"Hunger": "I'm hungry!",
-	"Thirst": "I'm thirsty!",
-	"Tiredness": "I'm tired!",
-}
 const REACTIONS: Dictionary = {
 	"Restaurant": "Yum!",
 	"Bakery": "Yum!",
@@ -43,6 +38,98 @@ const REACTIONS: Dictionary = {
 	"Hotel": "I feel better!",
 	"Park": "I feel better!",
 }
+
+# Matsubara-kun's name in the dialogue panel, matching the intro cinematic
+# (Main.gd's _play_intro), so the same speaker label is used everywhere.
+const MATSUBARA_NAME := "Matsubara kun"
+
+# One-time cultural comment, shown the first time the player discovers each place.
+const MATSUBARA_ARRIVAL: Dictionary = {
+	"Library": "図書館って静かでええなぁ。本いっぱいあるで！",
+	"Bank": "銀行や！日本やとATM使う人も多いな。",
+	"Post Office": "郵便局やな。赤い〒マーク、よう見るやろ？",
+	"Museum": "博物館や！昔のもん見るん、けっこうおもろいやん。",
+	"City Hall": "市役所やな。引っ越しとか、いろんな手続きするとこやで。",
+	"Police Station": "警察署や。日本には小さい「交番」もようあるで！",
+	"Fire Station": "消防署や！赤い消防車、めっちゃ目立つなぁ。",
+	"Hospital": "病院やな。元気なんがいちばんやで！",
+	"Drugstore": "ドラッグストアや！薬だけやなくて、お菓子とかも売ってるで。",
+	"Bakery": "パン屋さんや！日本のパン屋、種類めっちゃ多いねんな。",
+	"Bookstore": "本屋や！マンガのコーナー、つい見てまうわ。",
+	"Starbucks": "スタバやな。日本限定の飲みもん出ることあるで！",
+	"Restaurant": "レストランや！さて、何食べよかな〜。",
+	"Supermarket": "スーパーや。夕方になると、お弁当が安なることもあるで！",
+	"Convenience Store": "コンビニや！日本のコンビニ、ほんま何でもあるなぁ。",
+	"Gas Station": "ガソリンスタンドや。日本やと「セルフ」の店も多いで。",
+	"School": "学校や！日本の学校って、みんなで掃除すること多いねんで。",
+	"Swimming Pool": "プールや！学校の夏のプール、懐かしいなぁ。",
+	"Church": "教会やな。日本やと結婚式で見ることも多いで。",
+	"Hotel": "ホテルや！いっぱい歩いたし、ここで休みたいわ〜。",
+	"Nolan's House": "ノーラン先生の家や！おじゃましまーす！",
+	"Park": "公園や！ちょっと休むんにちょうどええな。",
+	"Train Station": "駅や！関西は電車いっぱいあるから便利やで。",
+	"Beach": "海やー！大阪からやったら、夏は海行きたなるなぁ！",
+	"Shopping Mall": "ショッピングモールや！ごはんも買いもんも、ここで全部できそうやな。",
+}
+# Short reaction shown on every later visit, so repeat travel stays quick.
+const MATSUBARA_ARRIVAL_REPEAT: Dictionary = {
+	"Library": "また図書館来たな。",
+	"Bank": "また銀行やな。",
+	"Post Office": "また郵便局来たわ。",
+	"Museum": "また博物館やな！",
+	"City Hall": "また市役所来たな。",
+	"Police Station": "また警察署やな。",
+	"Fire Station": "また消防車見れるかな？",
+	"Hospital": "また病院やな。",
+	"Drugstore": "またドラッグストア来たな。",
+	"Bakery": "またええ匂いしてるわ〜。",
+	"Bookstore": "また本屋来たな。",
+	"Starbucks": "またスタバやな。",
+	"Restaurant": "またここでごはんか〜。",
+	"Supermarket": "またスーパー来たな。",
+	"Convenience Store": "またコンビニやな。",
+	"Gas Station": "またガソリンスタンドやな。",
+	"School": "また学校来たな。",
+	"Swimming Pool": "またプールやな！",
+	"Church": "また教会来たな。",
+	"Hotel": "またホテルやな。",
+	"Nolan's House": "またおじゃまします！",
+	"Park": "また公園来たな。",
+	"Train Station": "また駅来たな。",
+	"Beach": "また海来たな！",
+	"Shopping Mall": "またモール来たな。",
+}
+# Reading pace for Matsubara's arrival line: proportional to length (Japanese
+# reads slower for elementary students than the typewriter's own pace implies),
+# clamped so a short repeat line is never gone before it can be read and a long
+# first-visit line never overstays it.
+const MATSUBARA_MIN_SECONDS := 2.2
+const MATSUBARA_MAX_SECONDS := 5.5
+const MATSUBARA_SECONDS_PER_CHAR := 0.09
+const MATSUBARA_BASE_SECONDS := 1.8
+
+# Matsubara's "what now" line, shown after the place comment on every assigned
+# arrival -- hungry/thirsty/tired pool if a need is active, general pool if not.
+# This replaces the old plain-text need banner ("I'm hungry!") entirely: the
+# state is now something Matsubara says, not a system alert.
+const STATE_LINES_HUNGER: Array[String] = [
+	"ちょっとお腹すいてきたわ。なんか食べに行きたいな。",
+	"お腹ぺこぺこやわ。ごはん食べられるとこ行こか。",
+]
+const STATE_LINES_THIRST: Array[String] = [
+	"なんか喉かわいたなぁ。飲みもんほしいわ。",
+	"ちょっと喉カラカラや。なんか飲みに行こ。",
+]
+const STATE_LINES_TIREDNESS: Array[String] = [
+	"ちょっと疲れてきたわ。ひと休みしたいなぁ。",
+	"よう歩いたし、ちょっと休みたいわ。",
+]
+const STATE_LINES_GENERAL: Array[String] = [
+	"次はどこ行こかな？",
+	"さて、次はどこ行こか。",
+	"次はどこ目指そかな。",
+	"ほな、次の場所決めよか。",
+]
 
 const CHOICE_PROMPT := "Where do you want to go next?"
 
@@ -158,14 +245,20 @@ func _collect_due_needs() -> void:
 		_repeat_trip += _next_repeat_gap()
 
 
-func _on_arrival_completed(destination: String) -> void:
+func _on_arrival_completed(destination: String, first_discovery: bool) -> void:
+	# Matsubara reacts to every arrival, not only assigned ones -- a place found
+	# by curiosity deserves the same personality as one the player was sent to.
+	# Needs and the next three-choice overlay stay tied to the assigned trip.
+	_set_modal_active(true)
+	await _show_matsubara_comment(destination, first_discovery)
+
 	if destination != assigned_destination:
+		_set_modal_active(false)
 		return
 
 	assigned_destination = ""
 	_dialogue.clear_destination_card()
 	trip_count += 1
-	_set_modal_active(true)
 
 	var resolved_need := false
 	if active_need != "" and _need_places(active_need).has(destination):
@@ -183,10 +276,58 @@ func _on_arrival_completed(destination: String) -> void:
 		var next_need := _take_next_eligible_need(destination)
 		if next_need != "":
 			active_need = next_need
-			await _dialogue.show_center_message(String(NEED_LINES[active_need]))
+
+	# Matsubara always says where his head's at before the next choice -- this
+	# is the ONLY presentation of the need state now; there is no separate
+	# system banner alongside it.
+	await _show_matsubara_state(active_need)
 
 	await _offer_destination(destination)
 	_set_modal_active(false)
+
+
+# Displays one Matsubara line in the dialogue panel for a readable pause, then
+# clears it. Shared by the place comment and the state comment below, so both
+# use the exact same presentation -- Matsubara talking, never a system banner.
+func _speak_matsubara(line: String) -> void:
+	if line == "":
+		return
+	_dialogue.show_text(MATSUBARA_NAME, line)
+	var seconds := clampf(
+			MATSUBARA_BASE_SECONDS + float(line.length()) * MATSUBARA_SECONDS_PER_CHAR,
+			MATSUBARA_MIN_SECONDS, MATSUBARA_MAX_SECONDS)
+	await get_tree().create_timer(seconds).timeout
+	_dialogue.hide_dialogue()
+
+
+# Matsubara's reaction to the place just reached: the full cultural line on a
+# first discovery, a short one on every later visit. Never called while the
+# player is still walking -- only from the post-arrival hook below.
+func _show_matsubara_comment(destination: String, first_discovery: bool) -> void:
+	var line: String = String(MATSUBARA_ARRIVAL.get(destination, ""))
+	if not first_discovery:
+		var repeat_line: String = String(MATSUBARA_ARRIVAL_REPEAT.get(destination, ""))
+		if repeat_line != "":
+			line = repeat_line
+	await _speak_matsubara(line)
+
+
+# Matsubara's "what now" line: hungry/thirsty/tired if a need is active after
+# this arrival's need bookkeeping, otherwise a general "where to?" line. Shown
+# on every assigned arrival, repeat visits included, right before the next
+# three-choice overlay opens.
+func _show_matsubara_state(need: String) -> void:
+	var pool: Array[String] = STATE_LINES_GENERAL
+	match need:
+		"Hunger":
+			pool = STATE_LINES_HUNGER
+		"Thirst":
+			pool = STATE_LINES_THIRST
+		"Tiredness":
+			pool = STATE_LINES_TIREDNESS
+	if pool.is_empty():
+		return
+	await _speak_matsubara(pool[_rng.randi_range(0, pool.size() - 1)])
 
 
 func _take_next_eligible_need(last_arrived: String) -> String:

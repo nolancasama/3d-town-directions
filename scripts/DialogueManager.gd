@@ -828,12 +828,14 @@ func _make_place_row(place: String) -> HBoxContainer:
 	row.add_theme_constant_override("separation", 7)
 
 	# A tick marks the found ones. Deliberately not strikethrough, which reads as
-	# "removed" or "unavailable" rather than "done".
-	var mark := Label.new()
-	mark.text = "✓" if found else ""
-	mark.custom_minimum_size = Vector2(18, 0)
-	mark.add_theme_font_size_override("font_size", 18)
-	mark.add_theme_color_override("font_color", Color(0.45, 0.95, 0.55))
+	# "removed" or "unavailable" rather than "done". Drawn rather than a "✓"
+	# glyph: this label never got the Japanese font override, so it fell back to
+	# Godot's default UI font, which has no checkmark glyph and rendered as a
+	# tofu box -- the same class of bug the MapPin icon was already written to
+	# avoid, just on the default font instead of the Japanese one.
+	var mark := CheckTick.new()
+	mark.custom_minimum_size = Vector2(18, 18)
+	mark.visible = found
 	row.add_child(mark)
 
 	var label := Label.new()
@@ -1092,3 +1094,22 @@ class MapPin:
 			Vector2(size.x * 0.5, size.y * 0.99),
 		]), PIN_COLOR)
 		draw_circle(head, radius * 0.40, HOLE_COLOR)
+
+
+# -----------------------------------------------------------------------------
+# Small drawn checkmark for the found-places list. Same reasoning as MapPin: a
+# glyph is only as reliable as the font under it, and this one is not worth
+# re-litigating per label.
+# -----------------------------------------------------------------------------
+class CheckTick:
+	extends Control
+
+	const TICK_COLOR := Color(0.45, 0.95, 0.55)
+	const TICK_WIDTH := 2.6
+
+	func _draw() -> void:
+		var p1 := Vector2(size.x * 0.16, size.y * 0.55)
+		var p2 := Vector2(size.x * 0.42, size.y * 0.80)
+		var p3 := Vector2(size.x * 0.86, size.y * 0.24)
+		draw_line(p1, p2, TICK_COLOR, TICK_WIDTH, true)
+		draw_line(p2, p3, TICK_COLOR, TICK_WIDTH, true)

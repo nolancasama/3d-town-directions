@@ -4,7 +4,7 @@ extends Node
 # GoalManager.gd
 # =============================================================================
 
-signal arrival_completed(destination: String)
+signal arrival_completed(destination: String, first_discovery: bool)
 
 var _player: Node3D
 var _dialogue: DialogueManager
@@ -140,7 +140,7 @@ func _on_reached() -> void:
 		var art2 := "" if dest_name.contains("'s") else "the "
 		await _dialogue.show_center_message("You've already found %s%s!" % [art2, dest_name])
 		_revisit = false
-		arrival_completed.emit(dest_name)
+		arrival_completed.emit(dest_name, false)
 		return
 
 	# First discovery — record time, award credit, celebrate.
@@ -151,7 +151,7 @@ func _on_reached() -> void:
 
 	_revisit = false
 	await _celebrate(dest_name, node, spot)
-	arrival_completed.emit(dest_name)
+	arrival_completed.emit(dest_name, true)
 
 
 func _celebrate(dest_name: String, node: Node3D, spot: Vector3) -> void:

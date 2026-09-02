@@ -96,3 +96,40 @@ A useful rule:
   space in the web build (and silently falls back to a system font on Windows,
   which is why it looks fine in the editor).
 
+## 2026-09-02 — Matsubara-kun reacts to every arrival; need banners removed
+
+- After the existing arrival/discovery feedback, Matsubara-kun now speaks two
+  short Kansai-ben lines before the next three-choice overlay: a place
+  reaction, then a "what now" state line. Both use the same dialogue-panel
+  presentation as his intro lines (no new UI), auto-advance after a readable
+  pause sized to the line's length, and never appear while the player is
+  still walking -- only from the post-arrival hook.
+- The place reaction fires on EVERY arrival, including places found by
+  curiosity (not just assigned ones) -- exploration deserves the same
+  personality as a directed trip. First discovery gets the full cultural
+  line; every later visit gets a short one, tracked via
+  GoalManager.arrival_completed's new `first_discovery` argument (the
+  discovery dictionary itself is already true by the time the signal fires,
+  so it cannot distinguish first-time from repeat on its own).
+- The state line is scoped to assigned arrivals only (it leads into the next
+  overlay, which only assigned arrivals trigger), and now shown on every one
+  of them, repeat visits included -- previously "I'm hungry!" only appeared
+  the instant a need newly triggered.
+- The old plain-text need banners ("I'm hungry!", "I'm thirsty!", "I'm
+  tired!", shown via show_center_message) are removed entirely. Matsubara's
+  state line is now the ONLY presentation of the need: hungry/thirsty/tired
+  pools when a need is active, a rotating "where to?" pool when none is.
+  The need-resolution reactions ("Yum!", "Ahh, refreshing!", "I feel
+  better!") are intentionally UNCHANGED and still English via
+  show_center_message -- neither plan asked to localize those, only the
+  trigger text, so this is a known inconsistency (Japanese Matsubara lines
+  surrounding an English resolution flash) left for a deliberate follow-up
+  rather than assumed.
+- Verified with a scripted integration probe driving the real GoalManager +
+  DestinationDirector + DialogueManager together (arrival triggered directly,
+  bypassing physical navigation): first vs. repeat place comments, the
+  general state line when idle, a need-triggered state line switching pools
+  correctly mid-arrival, and an active need persisting correctly across a
+  non-resolving arrival, all confirmed via captured screenshots and label
+  content before the probe was deleted.
+
