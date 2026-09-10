@@ -133,10 +133,14 @@ const STATE_LINES_GENERAL: Array[String] = [
 
 const CHOICE_PROMPT := "Where do you want to go next?"
 
-# Shown once, after the very first destination is chosen, to teach the loop:
-# choose a place -> walk up to a townsperson -> ask -> follow the directions.
-const TUTORIAL_LINE_1 := "人に近づいて、「Excuse me. Where is %s?」と聞いてみよう！"
-const TUTORIAL_LINE_2 := "人に近づくと話しかけられるよ。"
+# Shown once, after the very first destination is chosen, to teach the loop in
+# two stages: (1) walk up to a townsperson and say "Excuse me!", held until the
+# player actually does so, then (2) ask where the place is, held until a
+# "where is ...?" question is understood (answered or referred elsewhere).
+const TUTORIAL_STAGE1_LINE1 := "人に近づいて、「Excuse me!」と言ってみよう！"
+const TUTORIAL_STAGE1_LINE2 := "人に近づくと話しかけられるよ。"
+const TUTORIAL_STAGE2_LINE1 := "「Where is %s?」と聞いてみよう！"
+const TUTORIAL_STAGE2_LINE2 := ""
 const RECENT_OFFER_LIMIT := 2
 const NORMAL_TRIPS_AFTER_NEED := 2
 const REFUSAL_PROBABILITY := 0.28
@@ -168,7 +172,10 @@ var _normal_trips_remaining: int = 0
 var _recent_offer_keys: Array[String] = []
 var _consecutive_refusals: int = 0
 var _destination_questions: int = 0
-var _tutorial_shown: bool = false
+
+enum TutorialStage { NOT_STARTED, WAITING_FOR_EXCUSE_ME, WAITING_FOR_WHERE_IS, DONE }
+var _tutorial_stage: int = TutorialStage.NOT_STARTED
+var _tutorial_stage2_line1: String = ""
 
 
 func setup(dialogue: DialogueManager, goal_manager: GoalManager,
@@ -210,6 +217,38 @@ func should_refuse(destination: String, has_nearby_referral: bool) -> bool:
 
 func note_directions_given(_destination: String) -> void:
 	_consecutive_refusals = 0
+
+
+# Called by NPCInteraction the moment any townsperson answers "Yes?" -- the
+# player has said "Excuse me", so show the "ask where it is" hint. Also fires
+# on re-entering a conversation after an earlier one was abandoned before
+# success, redisplaying the same hint rather than reverting to stage 1.
+func advance_tutorial_to_ask() -> void:
+	if _tutorial_stage != TutorialStage.WAITING_FOR_EXCUSE_ME \
+			and _tutorial_stage != TutorialStage.WAITING_FOR_WHERE_IS:
+		return
+	_tutorial_stage = TutorialStage.WAITING_FOR_WHERE_IS
+	_dialogue.show_tutorial_hint(_tutorial_stage2_line1, TUTORIAL_STAGE2_LINE2)
+
+
+# Called by NPCInteraction when a conversation that got as far as "Yes?" ends
+# without the player successfully asking "where is ...?" (walked away, said
+# bye, cancelled). Hides the hint for the duration of no conversation, but
+# leaves the stage as WAITING_FOR_WHERE_IS so the next "Yes?" brings it back.
+func pause_tutorial_hint() -> void:
+	if _tutorial_stage != TutorialStage.WAITING_FOR_WHERE_IS:
+		return
+	_dialogue.hide_tutorial_hint()
+
+
+# Called by NPCInteraction the moment a "where is ...?" question is understood
+# (answered or referred elsewhere). The grammar's been demonstrated, so the
+# tutorial is done and the hint fades for good.
+func complete_tutorial() -> void:
+	if _tutorial_stage != TutorialStage.WAITING_FOR_WHERE_IS:
+		return
+	_tutorial_stage = TutorialStage.DONE
+	_dialogue.hide_tutorial_hint()
 
 
 func _build_need_schedule() -> void:
@@ -361,12 +400,12 @@ func _offer_destination(last_arrived: String) -> void:
 	# and directions must wait until the player asks an NPC "Where is the <place>?".
 	_dialogue.set_destination_card(assigned_destination)
 
-	if not _tutorial_shown:
-		_tutorial_shown = true
+	if _tutorial_stage == TutorialStage.NOT_STARTED:
+		_tutorial_stage = TutorialStage.WAITING_FOR_EXCUSE_ME
 		# Match the game's existing article rule: possessive names take no "the".
 		var article := "" if assigned_destination.contains("'s") else "the "
-		_dialogue.show_tutorial_hint(
-				TUTORIAL_LINE_1 % (article + assigned_destination), TUTORIAL_LINE_2)
+		_tutorial_stage2_line1 = TUTORIAL_STAGE2_LINE1 % (article + assigned_destination)
+		_dialogue.show_tutorial_hint(TUTORIAL_STAGE1_LINE1, TUTORIAL_STAGE1_LINE2)
 
 
 func _generate_choices(last_arrived: String) -> Array[String]:

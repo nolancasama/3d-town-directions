@@ -399,10 +399,9 @@ func _update_walk(delta: float) -> void:
 # Conversation state machine (speech or the E key)
 # -----------------------------------------------------------------------------
 func _begin_greet() -> void:
-	# The player has walked up to a townsperson, so the opening tutorial hint has
-	# served its purpose and fades out.
+	# Merely walking up doesn't dismiss the "say Excuse me!" tutorial hint --
+	# only actually saying it (see _greet()) does.
 	if _dialogue != null:
-		_dialogue.hide_tutorial_hint()
 		_dialogue.hide_places_list()   # never leave it sitting over a conversation
 	_state = State.GREET
 	_hint.visible = true     # show the "!" marker
@@ -415,6 +414,7 @@ func _greet(via_keyboard: bool = true) -> void:
 	_greeted = false
 	_dialogue.speak("Yes?", voice_pitch, voice_rate, voice_index, voice_family)
 	_dialogue.show_text(npc_name,"Yes?")
+	_destination_director.advance_tutorial_to_ask()
 	_face_target(_player)
 	_hint.visible = false
 	_speech.listen()
@@ -479,6 +479,7 @@ func _on_heard(text: String) -> void:
 				if dest != "":
 					break
 		if dest != "":
+			_destination_director.complete_tutorial()
 			var referral := _find_nearby_referral()
 			if _destination_director.should_refuse(dest, referral != null):
 				_refuse_and_refer(referral)
@@ -612,6 +613,10 @@ func _refuse_and_refer(referral: NPCInteraction) -> void:
 
 
 func _reset() -> void:
+	# _conversing is true only once the player got as far as "Yes?" -- leaving
+	# before asking "where is ...?" pauses (not completes) the stage-2 hint.
+	if _conversing:
+		_destination_director.pause_tutorial_hint()
 	_state = State.IDLE
 	_conversing = false
 	_greeted = false
