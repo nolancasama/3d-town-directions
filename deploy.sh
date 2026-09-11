@@ -50,6 +50,14 @@ if [ ! -f "$GODOT" ]; then
 fi
 
 # --- 1. Export ---------------------------------------------------------------
+# Re-subset the Japanese font first: any glyph added to scripts/*.gd since the
+# last subset is otherwise blank in the web build (no system font fallback).
+echo "==> Re-subsetting NotoSansJP from scripts..."
+python subset_font.py
+git add assets/fonts/NotoSansJP.ttf
+git diff --cached --quiet -- assets/fonts/NotoSansJP.ttf || \
+	git commit -m "Re-subset NotoSansJP for new script text" -- assets/fonts/NotoSansJP.ttf
+
 echo "==> Exporting '$PRESET' build..."
 mkdir -p build/web
 "$GODOT" --headless --path "$REPO" \
