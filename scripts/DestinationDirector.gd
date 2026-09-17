@@ -415,6 +415,8 @@ func _generate_choices(last_arrived: String) -> Array[String]:
 	else:
 		source = _goal_names.duplicate()
 	source.erase(last_arrived)
+	# Still a real building players can find, just never offered as a destination.
+	source.erase("Nolan's House")
 
 	var fallback: Array[String] = []
 	var preferred: Array[String] = []
